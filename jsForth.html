@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>js forth fun!</title>
+  <style>
+    html {
+        font-size: 62.5%;
+    }
+
+    body {
+        /*font-size: 1.6rem;*/
+    }
+
+    * {
+      -webkit-box-sizing: border-box;
+         -moz-box-sizing: border-box;
+              box-sizing: border-box;
+      font-family: consolas;              
+    }
+
+    #main {
+      max-width: 800px;
+      margin: 0 auto; 
+      position: relative;
+    }
+    #repl {
+      position: absolute;
+      left: 0;
+      max-width: 600px;
+    }
+    .icon {
+      display: inline;
+      width: 100px;
+    }
+    .user-output {
+      display: inline;
+      border: none;
+      resize: none;
+      background-color: #ccffff;
+    }
+    .forth-output {
+      border: none;
+      resize: none;
+      background-color: #ccffcc;
+    }
+    .error {
+      /*display: block;*/
+      border: none;
+      resize: none;
+      color: red;
+      background-color: #ffeeee;
+    }
+    #output {
+      /*he*/ight: 500px;
+      overflow-y: scroll;
+    }
+    #stack {
+      position: absolute;
+      left: 600px;
+      width: 200px;
+    }
+    .stack-element {
+      display: block;
+    }
+  </style>
+  <script src="forth.js"></script>
+  <script>
+    var forth = new Forth(window);
+    var xmlhttp = new XMLHttpRequest();
+    xmlhttp.onreadystatechange = function() {
+      if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
+        forth.run(xmlhttp.responseText);
+      }
+    };
+    xmlhttp.open("GET", "./forth.f", true);
+    xmlhttp.send();
+
+    function createOutputNode(icon, text, className) {
+      var outputNode = document.createElement("div");
+      
+      // var iconNode = document.createElement("div")
+      // iconNode.className = "icon";
+      // iconNode.textContent = icon;
+      // outputNode.appendChild(iconNode);
+
+      var textNode = document.createElement("textarea");
+      textNode.className = className;
+      textNode.readOnly = true;
+      textNode.cols = 80;
+      text = icon + " " + text;
+      // Roughly guess the number of rows by assuming lines wrap every 80 characters
+      textNode.rows = text.split("\n").map(function(l){return (l.length/80)+1}).reduce(function(p,c){return p+c}, 0);
+      textNode.value = text;
+      outputNode.appendChild(textNode)
+
+      document.getElementById("output").appendChild(outputNode);
+    }
+
+    function runforth() {
+      var inputNode = document.getElementById("input");
+      var input = inputNode.value.trim();
+      if (input) {
+        createOutputNode("\u2192", input, "user-output");
+        // var textNode = document.createElement("textarea");
+        // textNode.className = "user-output";
+        // textNode.readOnly = true;
+        // textNode.cols = 80;
+        // // Roughly guess the number of rows by assuming lines wrap every 80 characters
+        // textNode.rows = input.split("\n").map(function(l){return (l.length/80)+1}).reduce(function(p,c){return p+c}, 0);
+        // textNode.value = input;
+        // document.getElementById("output").appendChild(textNode);
+
+        try {
+          var output = forth.run(input);
+          if (output) {
+            createOutputNode("\u2190", output, "forth-output")
+            // var textNode = document.createElement("textarea");
+            // textNode.className = "forth-output";
+            // textNode.readOnly = true;
+            // textNode.cols = 80;
+            // // Roughly guess the number of rows by assuming lines wrap every 80 characters
+            // textNode.rows = output.split("\n").map(function(l){return (l.length/80)+1}).reduce(function(p,c){return p+c}, 0);
+            // textNode.value = output;
+
+            // document.getElementById("output").appendChild(textNode);
+          }
+        } catch (err) {
+          createOutputNode("X", err, "error")
+          throw err;
+          // var textNode = document.createElement("textarea");
+          // textNode.className = "error";
+          // textNode.readOnly = true;
+          // textNode.rows = 1;
+          // textNode.cols = 80;
+          // textNode.value = err;
+          // document.getElementById("output").appendChild(textNode);
+        }
+      }
+      inputNode.value = "";
+
+      showStack();
+    }
+
+    function showStack() {
+      var stack = forth.stack;
+      var stackNode = document.getElementById("stack");
+      // Clear stack
+      while (stackNode.firstChild) stackNode.removeChild(stackNode.firstChild);
+
+      for (var i = stack.length - 1; i >= 0; i--) {
+        var element = document.createElement("span");
+        element.className = "stack-element";
+        element.textContent = String(stack[i]);
+        stackNode.appendChild(element);
+      };
+    }
+  </script>
+</head>
+<body>
+  <section id="main">
+    <section id="repl">
+      <section id="output"></section>
+      <section>
+        <textarea id="input" autofocus="true", cols="80" rows="6" onkeyup="if (event.keyCode == 13 && !event.getModifierState('Shift')) runforth()"></textarea>
+      </section>
+    </section>
+
+    <section id="stack"></section>
+  </section>
+</body>
+</html>
