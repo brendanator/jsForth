@@ -8,7 +8,7 @@
     }
 
     body {
-        /*font-size: 1.6rem;*/
+        font-size: 1.6rem;
     }
 
     * {
@@ -19,6 +19,7 @@
     }
 
     #main {
+      /*display: inline;*/
       max-width: 800px;
       margin: 0 auto; 
       position: relative;
@@ -27,6 +28,8 @@
       position: absolute;
       left: 0;
       max-width: 600px;
+      height: 100vh;
+      max-height: 100vh;
     }
     .icon {
       display: inline;
@@ -51,13 +54,15 @@
       background-color: #ffeeee;
     }
     #output {
-      /*he*/ight: 500px;
+      max-height: 70vh;
       overflow-y: scroll;
     }
     #stack {
       position: absolute;
       left: 600px;
       width: 200px;
+      max-height: 70vh;
+      overflow-y: scroll;
     }
     .stack-element {
       display: block;
@@ -66,32 +71,72 @@
   <script src="forth.js"></script>
   <script>
     var forth = new Forth(window);
-    var xmlhttp = new XMLHttpRequest();
-    xmlhttp.onreadystatechange = function() {
-      if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
-        forth.run(xmlhttp.responseText);
+    function loadForth(file) {
+      var xmlhttp = new XMLHttpRequest();
+      xmlhttp.onreadystatechange = function() {
+        if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
+          console.log(forth.run(xmlhttp.responseText));
+          showStack();
+        }
+      };
+      xmlhttp.open("GET", file, true);
+      xmlhttp.send();
+    }
+    loadForth("forth.f");
+    // loadForth("ans-forth-tests.f");
+
+    var inputHistory = [""];
+    var historyCount = 0;
+    var historySelection = 0;
+    function useHistory(selection) {
+        var inputNode = document.getElementById("input");
+
+        if (inputNode.value !== inputHistory[historySelection]) {
+          historySelection = historyCount-1;
+          inputHistory[historyCount] = inputNode.value;
+        } else {
+          historySelection = Math.min(Math.max(selection, 0), inputHistory.length-1);
+        }
+
+        inputNode.value = inputHistory[historySelection];
+        inputNode.selectionStart = inputNode.value.length;
+    }
+
+    function updateHistory(input) {
+      // Remove duplicates
+      for (var i = inputHistory.length - 1; i >= 0; i--) {
+        if (inputHistory[i] === input) {
+          inputHistory.splice(i, 1);
+          historyCount--;
+        }
       }
-    };
-    xmlhttp.open("GET", "./forth.f", true);
-    xmlhttp.send();
+      inputHistory[historyCount] = input;
+      historyCount = inputHistory.length;
+      historySelection = inputHistory.length;
+      inputHistory.push("");
+    }
+
+    function onUserInput(event) {
+      if (event.keyCode == 13 && !event.shiftKey)
+        runforth();
+      else if (event.keyCode == 80 && event.ctrlKey)
+        useHistory(historySelection-1);
+      else if (event.keyCode == 78 && event.ctrlKey)
+        useHistory(historySelection+1);
+    }
 
     function createOutputNode(icon, text, className) {
       var outputNode = document.createElement("div");
       
-      // var iconNode = document.createElement("div")
-      // iconNode.className = "icon";
-      // iconNode.textContent = icon;
-      // outputNode.appendChild(iconNode);
-
       var textNode = document.createElement("textarea");
       textNode.className = className;
       textNode.readOnly = true;
       textNode.cols = 80;
       text = icon + " " + text;
       // Roughly guess the number of rows by assuming lines wrap every 80 characters
-      textNode.rows = text.split("\n").map(function(l){return (l.length/80)+1}).reduce(function(p,c){return p+c}, 0);
+      textNode.rows = text.split("\n").map(function(l){return (l.length/80)+1;}).reduce(function(p,c){return p+c;}, 0);
       textNode.value = text;
-      outputNode.appendChild(textNode)
+      outputNode.appendChild(textNode);
 
       document.getElementById("output").appendChild(outputNode);
     }
@@ -100,45 +145,24 @@
       var inputNode = document.getElementById("input");
       var input = inputNode.value.trim();
       if (input) {
+        updateHistory(input);
         createOutputNode("\u2192", input, "user-output");
-        // var textNode = document.createElement("textarea");
-        // textNode.className = "user-output";
-        // textNode.readOnly = true;
-        // textNode.cols = 80;
-        // // Roughly guess the number of rows by assuming lines wrap every 80 characters
-        // textNode.rows = input.split("\n").map(function(l){return (l.length/80)+1}).reduce(function(p,c){return p+c}, 0);
-        // textNode.value = input;
-        // document.getElementById("output").appendChild(textNode);
 
         try {
           var output = forth.run(input);
           if (output) {
-            createOutputNode("\u2190", output, "forth-output")
-            // var textNode = document.createElement("textarea");
-            // textNode.className = "forth-output";
-            // textNode.readOnly = true;
-            // textNode.cols = 80;
-            // // Roughly guess the number of rows by assuming lines wrap every 80 characters
-            // textNode.rows = output.split("\n").map(function(l){return (l.length/80)+1}).reduce(function(p,c){return p+c}, 0);
-            // textNode.value = output;
-
-            // document.getElementById("output").appendChild(textNode);
+            createOutputNode("\u2190", output, "forth-output");
           }
         } catch (err) {
-          createOutputNode("X", err, "error")
+          createOutputNode("X", err, "error");
           throw err;
-          // var textNode = document.createElement("textarea");
-          // textNode.className = "error";
-          // textNode.readOnly = true;
-          // textNode.rows = 1;
-          // textNode.cols = 80;
-          // textNode.value = err;
-          // document.getElementById("output").appendChild(textNode);
+        } finally {
+          showStack();          
+          inputNode.value = "";
+          var outputNode = document.getElementById("output");
+          outputNode.scrollTop = outputNode.scrollHeight;
         }
       }
-      inputNode.value = "";
-
-      showStack();
     }
 
     function showStack() {
@@ -152,17 +176,22 @@
         element.className = "stack-element";
         element.textContent = String(stack[i]);
         stackNode.appendChild(element);
-      };
+      }
     }
   </script>
 </head>
 <body>
+  <section>
+    <h2>js forth fun!</h2>
+    <a href="http://www.forth.com/starting-forth/sf1/sf1.html" target="_blank">Learn forth here</a>    
+  </section>
   <section id="main">
     <section id="repl">
       <section id="output"></section>
       <section>
-        <textarea id="input" autofocus="true", cols="80" rows="6" onkeyup="if (event.keyCode == 13 && !event.getModifierState('Shift')) runforth()"></textarea>
+        <textarea id="input" autofocus="true", cols="80" rows="6" onkeyup="onUserInput(event)"></textarea>
       </section>
+      Ctrl+p and Ctrl+n for repl history
     </section>
 
     <section id="stack"></section>

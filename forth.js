@@ -1,13 +1,13 @@
 function Forth(global) {
     "use strict";
 
-    var currentWord, nextWord;
+    var currentInstruction, instructionPointer;
 
     var wordDefinitions = [];
 
     var returnStack = [];
 
-    var dataStack = [];
+    var stack = [];
 
     var latest = (function() {
         var val = null;
@@ -19,63 +19,75 @@ function Forth(global) {
         };
     })();
 
-    function Header(link, name, immediate, hidden) {
+    function Header(link, name, immediate, hidden, executionToken) {
         this.link = link;
         this.name = name;
         this.immediate = immediate || false;
         this.hidden = hidden || false;
+        this.executionToken = executionToken;
     }
 
     function defheader(name, immediate, hidden) {
-        wordDefinitions.push(new Header(latest(), name, immediate, hidden));
+        wordDefinitions.push(new Header(latest(), name, immediate, hidden, wordDefinitions.length + 1));
         latest(wordDefinitions.length - 1);
     }
 
-    function defjs(name, f, immediate, hidden) {
-        defheader(name, immediate, hidden);
+    function defjs(name, f, immediate) {
+        defheader(name, immediate);
         wordDefinitions.push(f);
-        return wordDefinitions.length - 1;
+        return f;
     }
 
     function next() {
-        currentWord = wordDefinitions[nextWord];
-        nextWord += 1;
+        currentInstruction = wordDefinitions[instructionPointer++];
     }
 
-    // Make sure this is the first word definition
-    function enter() {
-        returnStack.push(nextWord);
-        nextWord = currentWord + 1;
-        next();
+    function compileEnter() {
+        var instruction = wordDefinitions.length + 1;
+
+        function enter() {
+            returnStack.push(instructionPointer);
+            instructionPointer = instruction;
+            next();
+        }
+        wordDefinitions.push(enter);
+        return enter;
     }
-    defjs("enter", enter);
 
     defjs("exit", function exit() {
-        nextWord = returnStack.pop();
+        instructionPointer = returnStack.pop();
         next();
     });
 
-    function find(word) {
+    function findDefinition(word) {
         var current = latest();
         while (current !== null) {
             var wordDefinition = wordDefinitions[current];
             // Case insensitive
             if (wordDefinition.name.toLowerCase() == word.toLowerCase() && !wordDefinition.hidden)
-                return current;
+                return wordDefinition;
             current = wordDefinition.link;
         }
         return current;
     }
     defjs("find", function find() {
-        dataStack.push(find(dataStack.pop()));
+        var word = stack.pop();
+        var definition = findDefinition(word);
+        if (definition) {
+            stack.push(definition.executionToken);
+            stack.push(definition.immediate ? 1 : -1);
+        } else {
+            stack.push(word);
+            stack.push(0);
+        }
         next();
     });
 
     function defvar(name, initial) {
         defheader(name);
         var varAddress = wordDefinitions.length + 1;
-        wordDefinitions.push(function() {
-            dataStack.push(varAddress);
+        wordDefinitions.push(function variable() {
+            stack.push(varAddress);
             next();
         });
         wordDefinitions.push(initial);
@@ -91,36 +103,80 @@ function Forth(global) {
     var compiling = defvar("state", 0);
     latest = defvar("latest", wordDefinitions.length); // Replace existing function definition
     var base = defvar("base", 10);
-    var cursor = defvar(">in", 0);
+    var toIn = defvar(">in", 0);
 
-    defjs("here", function() {
-        dataStack.push(wordDefinitions.length);
+    defjs("here", function here() {
+        stack.push(wordDefinitions.length);
         next();
     });
 
     var LIT = defjs("lit", function lit() {
-        dataStack.push(wordDefinitions[nextWord]);
-        nextWord += 1;
+        stack.push(wordDefinitions[instructionPointer]);
+        instructionPointer += 1;
         next();
     });
 
     var input = "";
+    var SOURCE = 1 << 31;
+    var inputBufferPosition = 0;
+    var inputBufferLength = -1;
     var EndOfInput = (function() {})();
 
+    defjs("source", function source() {
+        stack.push(inputBufferPosition + SOURCE);
+        stack.push(inputBufferLength);
+        next();
+    });
+
+    function _refill() {
+        inputBufferPosition += inputBufferLength + 1;
+        inputBufferLength = input.substring(inputBufferPosition).search(/\n/);
+        toIn(0);
+        return inputBufferLength >= 0;
+        // if (input) {
+        //     toIn(0);
+        //     inputBuffer = "";
+        //     while (input && !inputBuffer) {
+        //         var newLineIndex = input.search(/\n/);
+        //         if (newLineIndex >= 0) {
+        //             inputBuffer = input.substring(0, newLineIndex);
+        //             input = input.substring(newLineIndex + 1);
+        //         } else {
+        //             inputBuffer = input;
+        //             input = "";
+        //         }
+        //     }
+        //     return true;
+        // } else
+        //     return false;
+    }
+    defjs("refill", function refill() {
+        stack.push(_refill());
+        next();
+    });
+
     function readKey() {
-        var cursorPosition = cursor();
-        if (cursorPosition < input.length) {
-            var key = input.charAt(cursorPosition);
-            cursor(cursorPosition + 1);
-            return key;
-        } else if (cursorPosition == input.length) {
-            cursor(cursorPosition + 1);
-            return " ";
+        if (toIn() > inputBufferLength) {
+            if (!_refill()) throw EndOfInput;
         }
-        throw EndOfInput;
+
+        var key = input.charCodeAt(inputBufferPosition + toIn());
+        toIn(toIn() + 1);
+        return key;
+
+        // if (toIn() >= inputBuffer.length) {
+        //     if (_refill())
+        //         return "\n";
+        //     else
+        //         throw EndOfInput;
+        // } else {
+        //     var key = inputBuffer.charAt(toIn());
+        //     toIn(toIn() + 1);
+        //     return key;
+        // }
     }
     defjs("key", function key() {
-        dataStack.push(readKey());
+        stack.push(readKey());
         next();
     });
 
@@ -128,51 +184,114 @@ function Forth(global) {
         var word = "";
         var key;
         while (true) {
-            key = readKey();
-
-            // Start of comment
-            if (key === "\\") {
-                // Skip comment until new line
-                while (readKey() !== "\n");
-
-                // Start of word
-            } else if (!key.match(/\s/)) {
+            key = String.fromCharCode(readKey());
+            if (!key.match(/\s/))
                 break;
-            }
         }
-
 
         while (!key.match(/\s/)) {
             word += key;
-            key = readKey();
+            key = String.fromCharCode(readKey());
         }
 
         return word;
     }
     defjs("word", function word() {
-        dataStack.push(readWord());
+        stack.push(readWord());
         next();
     });
 
-    defjs("parse", function parse() {
-        var delimiter = dataStack.pop();
-        var string = "";
+    function _parse(delimiter) {
+        if (typeof delimiter === "string") delimiter = delimiter.charCodeAt(0);
+        var address = SOURCE + inputBufferPosition + toIn();
+        var length = 0;
         var key = readKey();
         while (key !== delimiter) {
-            string += key;
+            length++;
             key = readKey();
         }
-        dataStack.push(string);
+        return [address, length];
+    }
+    defjs("parse", function parse() {
+        var addressLength = _parse(stack.pop());
+        stack.push(addressLength[0]);
+        stack.push(addressLength[1]);
+        next();
+    });
+
+    defjs("char", function char() {
+        stack.push(readWord().charCodeAt(0));
         next();
     });
 
     var output = "";
-    defjs("emit", function emit() {
-        output += String.fromCharCode(dataStack.pop());
+
+    defjs("cr", function cr() {
+        output += "\n";
+        next();
     });
 
-    // Parse a float in the provide radix
-    function parseFloat(string, radix) {
+    defjs(".", function dot() {
+        var value;
+        if (stack.length) {
+            var top = stack.pop();
+
+            if (typeof top === "undefined")
+                value = "undefined";
+            else if (top === null)
+                value = "null";
+            else
+                value = top.toString(base()); // Output numbers in current base
+        } else
+            value = "Stack empty";
+
+        output += value + " ";
+        next();
+    });
+
+    defjs("emit", function emit() {
+        var value = stack.pop();
+        if (typeof value === "number")
+            output += String.fromCharCode(value);
+        else
+            output += value;
+
+        next();
+    });
+
+    defjs("type", function type() {
+        var length = stack.pop();
+        var address = stack.pop();
+        for (var i = 0; i < length; i++) {
+            var value = getAddress(address + i);
+            if (typeof value === "number")
+                output += String.fromCharCode(value);
+            else
+                output += value;
+        }
+        next();
+    });
+
+    function _parseInt(string, base) {
+        if (string[0] !== "-") { // Positive
+            var int = 0;
+            for (var i = 0; i < string.length; i++) {
+                int *= base;
+                int += parseInt(string[i], base);
+            }
+            return int;
+        } else {
+            var int = 0;
+            for (var i = 1; i < string.length; i++) {
+                int *= base;
+                int -= parseInt(string[i], base);
+            }
+            return int;
+        }
+    }
+
+    // Parse a float in the provide base
+    function parseFloat(string, base) {
         //split the string at the decimal point
         string = string.split(/\./);
 
@@ -184,24 +303,28 @@ function Forth(global) {
         //if there was a decimal point & something after it
         if (string.length > 1 && string[1] !== '') {
             var fractionLength = string[1].length;
-            string[1] = parseInt(string[1], radix);
-            string[1] *= Math.pow(radix, -fractionLength);
-            return parseInt(string[0], radix) + string[1];
+            string[1] = _parseInt(string[1], base);
+            string[1] *= Math.pow(base, -fractionLength);
+            var int = _parseInt(string[0], base);
+            if (int >= 0)
+                return int + string[1];
+            else
+                return int - string[1];
         }
 
         //if there wasn't a decimal point or there was but nothing was after it
-        return parseInt(string[0], radix);
+        return _parseInt(string[0], base);
     }
 
     defjs("interpret", function interpret() {
         var word = readWord();
-        var address = find(word);
-        if (address !== null) {
-            if (!compiling() || wordDefinitions[address].immediate) {
-                currentWord = address + 1;
+        var definition = findDefinition(word);
+        if (definition) {
+            if (!compiling() || definition.immediate) {
+                currentInstruction = wordDefinitions[definition.executionToken];
                 return;
             } else {
-                wordDefinitions.push(address + 1);
+                wordDefinitions.push(wordDefinitions[definition.executionToken]);
             }
         } else {
             var num = parseFloat(word, base());
@@ -210,7 +333,7 @@ function Forth(global) {
                 wordDefinitions.push(LIT);
                 wordDefinitions.push(num);
             } else {
-                dataStack.push(num);
+                stack.push(num);
             }
         }
         next();
@@ -218,25 +341,34 @@ function Forth(global) {
 
     // Converts an execution token into the data field address
     defjs(">body", function dataFieldAddress() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] + 1;
+        stack[stack.length - 1] = stack[stack.length - 1] + 1;
         next();
     });
 
     defjs("create", function create() {
         defheader(readWord(), false, false);
-        var dataFieldAddress = wordDefinitions.length+1;
+        var dataFieldAddress = wordDefinitions.length + 1;
         wordDefinitions.push(function pushDataFieldAddress() {
-            dataStack.push(dataFieldAddress);
+            stack.push(dataFieldAddress);
             next();
         });
         next();
     });
 
-    defjs(",", function comma() {
-        wordDefinitions.push(dataStack.pop());
+    defjs("allot", function allot() {
+        wordDefinitions.length += stack.pop();
         next();
     });
 
+    defjs(",", function comma() {
+        wordDefinitions.push(stack.pop());
+        next();
+    });
+
+    defjs("compile,", function compileComma() {
+        wordDefinitions.push(wordDefinitions[stack.pop()]);
+        next();
+    });
 
     defjs("[", function lbrac() {
         compiling(false); // Immediate
@@ -255,358 +387,364 @@ function Forth(global) {
     }, true); // Immediate
 
     defjs("hidden", function hidden() {
-        var wordDefinition = wordDefinitions[dataStack.pop()];
+        var wordDefinition = wordDefinitions[stack.pop()];
         wordDefinition.hidden = !wordDefinition.hidden;
         next();
     });
 
+    function getAddress(address) {
+        if (address < 0) {
+            return input.charCodeAt(address - SOURCE);
+        } else {
+            return wordDefinitions[address];
+        }
+    }
+
+    function setAddress(address, value) {
+        if (address < 0) {
+            // TODO ?
+            throw "Changing SOURCE";
+        } else {
+            wordDefinitions[address] = value;
+        }
+    }
+
     defjs("!", function store() {
-        var address = dataStack.pop();
-        var data = dataStack.pop();
-        wordDefinitions[address] = data;
+        var address = stack.pop();
+        var data = stack.pop();
+        setAddress(address, data);
         next();
     });
 
     defjs("@", function fetch() {
-        var address = dataStack.pop();
-        dataStack.push(wordDefinitions[address]);
+        var address = stack.pop();
+        stack.push(getAddress(address));
         next();
     });
 
     defjs("+!", function addStore() {
-        var address = dataStack.pop();
-        var data = dataStack.pop();
+        var address = stack.pop();
+        var data = stack.pop();
         wordDefinitions[address] = wordDefinitions[address] + data;
         next();
     });
 
     defjs("-!", function subtractStore() {
-        var address = dataStack.pop();
-        var data = dataStack.pop();
+        var address = stack.pop();
+        var data = stack.pop();
         wordDefinitions[address] = wordDefinitions[address] - data;
         next();
     });
 
     defjs("'", function tick() {
-        dataStack.push(find(readWord()) + 1);
+        stack.push(findDefinition(readWord()).executionToken);
         next();
     });
 
     defjs("[']", function bracketTick() {
         wordDefinitions.push(LIT);
-        wordDefinitions.push(find(readWord()) + 1);
+        wordDefinitions.push(findDefinition(readWord()).executionToken);
         next();
     }, true);
 
-    defjs("branch", function branch() {
-        nextWord += wordDefinitions[nextWord];
+    defjs("jump", function jump() {
+        instructionPointer += wordDefinitions[instructionPointer];
         next();
     });
 
-
-    defjs("0branch", function falseBranch() {
-        if (!dataStack.pop()) {
-            nextWord += wordDefinitions[nextWord];
+    defjs("jumpIfFalse", function jumpIfFalse() {
+        if (!stack.pop()) {
+            instructionPointer += wordDefinitions[instructionPointer];
         } else {
-            nextWord++; // Skip the offset
+            instructionPointer++; // Skip the offset
         }
         next();
     });
 
-    defjs("execute", function() {
-        currentWord = dataStack.pop();
+    defjs("execute", function execute() {
+        currentInstruction = wordDefinitions[stack.pop()];
     });
 
     // Stack operations
     defjs("drop", function drop() {
-        dataStack.pop();
+        stack.pop();
         next();
     });
 
     defjs("swap", function swap() {
-        var first = dataStack[dataStack.length - 1];
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 2];
-        dataStack[dataStack.length - 2] = first;
+        var first = stack[stack.length - 1];
+        stack[stack.length - 1] = stack[stack.length - 2];
+        stack[stack.length - 2] = first;
         next();
     });
 
     defjs("dup", function dup() {
-        dataStack[dataStack.length] = dataStack[dataStack.length - 1];
+        stack[stack.length] = stack[stack.length - 1];
         next();
     });
 
     defjs("over", function over() {
-        dataStack[dataStack.length] = dataStack[dataStack.length - 2];
+        stack[stack.length] = stack[stack.length - 2];
         next();
     });
 
     defjs("rot", function rot() {
-        var third = dataStack[dataStack.length - 3];
-        dataStack[dataStack.length - 3] = dataStack[dataStack.length - 2];
-        dataStack[dataStack.length - 2] = dataStack[dataStack.length - 1];
-        dataStack[dataStack.length - 1] = third;
+        var third = stack[stack.length - 3];
+        stack[stack.length - 3] = stack[stack.length - 2];
+        stack[stack.length - 2] = stack[stack.length - 1];
+        stack[stack.length - 1] = third;
         next();
     });
 
-    defjs("-rot", - function() {
-        var first = dataStack[dataStack.length - 1];
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 2];
-        dataStack[dataStack.length - 2] = dataStack[dataStack.length - 3];
-        dataStack[dataStack.length - 3] = first;
+    defjs("-rot", function backRot() {
+        var first = stack[stack.length - 1];
+        stack[stack.length - 1] = stack[stack.length - 2];
+        stack[stack.length - 2] = stack[stack.length - 3];
+        stack[stack.length - 3] = first;
         next();
     });
 
     defjs("2drop", function twoDrop() {
-        dataStack.pop();
-        dataStack.pop();
+        stack.pop();
+        stack.pop();
         next();
     });
 
     defjs("2dup", function twoDup() {
-        dataStack[dataStack.length] = dataStack[dataStack.length - 2];
-        dataStack[dataStack.length] = dataStack[dataStack.length - 2];
+        stack[stack.length] = stack[stack.length - 2];
+        stack[stack.length] = stack[stack.length - 2];
+        next();
+    });
+
+    defjs("2over", function twoDup() {
+        stack[stack.length] = stack[stack.length - 4];
+        stack[stack.length] = stack[stack.length - 4];
         next();
     });
 
     defjs("2swap", function twoSwap() {
-        var first = dataStack[dataStack.length - 1];
-        var second = dataStack[dataStack.length - 2];
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 3];
-        dataStack[dataStack.length - 2] = dataStack[dataStack.length - 4];
-        dataStack[dataStack.length - 3] = first;
-        dataStack[dataStack.length - 4] = second;
+        var first = stack[stack.length - 1];
+        var second = stack[stack.length - 2];
+        stack[stack.length - 1] = stack[stack.length - 3];
+        stack[stack.length - 2] = stack[stack.length - 4];
+        stack[stack.length - 3] = first;
+        stack[stack.length - 4] = second;
         next();
     });
 
     defjs("?dup", function nonZeroDup() {
-        var first = dataStack[dataStack.length - 1];
-        if (first !== 0) dataStack[dataStack.length] = first;
+        var first = stack[stack.length - 1];
+        if (first !== 0) stack[stack.length] = first;
+        next();
+    });
+
+    defjs("depth", function depth() {
+        stack.push(stack.length);
+        next();
+    });
+
+    defjs("negate", function negate() {
+        stack.push(-stack.pop());
         next();
     });
 
     defjs("1+", function inc() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] + 1;
+        stack[stack.length - 1] = stack[stack.length - 1] + 1;
         next();
     });
 
     defjs("1-", function dec() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] - 1;
+        stack[stack.length - 1] = stack[stack.length - 1] - 1;
+        next();
+    });
+
+    defjs("2*", function inc() {
+        stack[stack.length - 1] = stack[stack.length - 1] << 1;
+        next();
+    });
+
+    defjs("2/", function inc() {
+        stack[stack.length - 1] = stack[stack.length - 1] >> 1;
         next();
     });
 
     defjs("4+", function inc4() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] + 4;
+        stack[stack.length - 1] = stack[stack.length - 1] + 4;
         next();
     });
 
     defjs("4-", function dec4() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] - 4;
+        stack[stack.length - 1] = stack[stack.length - 1] - 4;
         next();
     });
 
-    defjs("+", function add() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] + first;
+    defjs("+", function plus() {
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] + first;
         next();
     });
 
-    defjs("-", function subtract() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] - first;
+    defjs("-", function minus() {
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] - first;
         next();
     });
 
     defjs("*", function multiply() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] * first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] * first;
         next();
     });
 
     defjs("/", function divide() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] / first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] / first;
         next();
     });
 
     defjs("mod", function mod() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] % first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] % first;
         next();
     });
 
+    defjs("abs", function abs() {
+        stack.push(Math.abs(stack.pop()));
+        next();
+    });
+
+    defjs("lshift", function lshift() {
+        var shift = stack.pop();
+        var num = stack.pop();
+        stack.push(num << shift);
+        next();
+    });
+
+    defjs("rshift", function rshift() {
+        var shift = stack.pop();
+        var num = stack.pop();
+        stack.push(num >>> shift);
+        next();
+    });
+
+    defjs("max", function max() {
+        stack.push(Math.max(stack.pop(), stack.pop()));
+        next();
+    });
+
+    defjs("min", function min() {
+        stack.push(Math.min(stack.pop(), stack.pop()));
+        next();
+    });
+
+
     defjs("=", function equal() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] === first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] == first ? -1 : 0;
         next();
     });
 
     defjs("<>", function notEqual() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] !== first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] != first ? -1 : 0;
         next();
     });
 
     defjs("<", function lessThan() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] < first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] < first ? -1 : 0;
         next();
     });
 
     defjs(">", function greaterThan() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] > first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] > first ? -1 : 0;
         next();
     });
 
     defjs("<=", function lessThanEqual() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] <= first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] <= first ? -1 : 0;
         next();
     });
 
     defjs(">=", function greaterThanEqual() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] >= first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] >= first ? -1 : 0;
         next();
     });
 
-    defjs("0=", function isZero() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] === 0;
+    defjs("unsigned", function unsigned() {
+        stack.push(stack.pop() >>> 0);
         next();
     });
 
-    defjs("0<>", function nonZero() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] !== 0;
+    defjs("true", function _true() {
+        stack.push(true);
         next();
     });
 
-    defjs("0<", function lessThanZero() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] < 0;
-        next();
-    });
-
-    defjs("0>", function greaterThanZero() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] > 0;
-        next();
-    });
-
-    defjs("0<=", function lessThanEqualZero() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] <= 0;
-        next();
-    });
-
-    defjs("0>=", function greaterThanEqualZero() {
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] >= 0;
+    defjs("false", function _false() {
+        stack.push(false);
         next();
     });
 
     defjs("and", function and() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] & first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] & first;
         next();
     });
 
     defjs("or", function or() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] | first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] | first;
         next();
     });
 
     defjs("xor", function xor() {
-        var first = dataStack.pop();
-        dataStack[dataStack.length - 1] = dataStack[dataStack.length - 1] ^ first;
+        var first = stack.pop();
+        stack[stack.length - 1] = stack[stack.length - 1] ^ first;
         next();
     });
 
     defjs("invert", function invert() {
-        dataStack[dataStack.length - 1] = ~dataStack[dataStack.length - 1];
-        next();
-    });
-
-    defjs("c!", function storeByte() {
-        // TODO ? -  C!
-        next();
-    });
-
-    defjs("c@", function fetchByte() {
-        // TODO ? -  C@
-        next();
-    });
-
-    defjs("c@c!", function copyByte() {
-        // TODO ? -  C@C!
-        next();
-    });
-
-    defjs("cmove", function moveByte() {
-        // TODO ? -  CMOVE
+        stack[stack.length - 1] = ~stack[stack.length - 1];
         next();
     });
 
     // Return stack
     defjs(">r", function toR() {
-        returnStack.push(dataStack.pop());
+        returnStack.push(stack.pop());
         next();
     });
 
     defjs("r>", function rFrom() {
-        dataStack.push(returnStack.pop());
+        stack.push(returnStack.pop());
         next();
     });
 
     defjs("r@", function rFetch() {
-        dataStack.push(returnStack[returnStack.length - 1]);
+        stack.push(returnStack[returnStack.length - 1]);
         next();
     });
 
     defjs("2r>", function twoRFrom() {
         var top = returnStack.pop();
-        dataStack.push(returnStack.pop());
-        dataStack.push(top);
+        stack.push(returnStack.pop());
+        stack.push(top);
         next();
     });
 
     defjs("2>r", function twoToR() {
-        var top = dataStack.pop();
-        returnStack.push(dataStack.pop());
+        var top = stack.pop();
+        returnStack.push(stack.pop());
         returnStack.push(top);
         next();
     });
 
     defjs("2r@", function twoRFetch() {
-        dataStack.push(returnStack[returnStack.length - 2]);
-        dataStack.push(returnStack[returnStack.length - 1]);
-        next();
-    });
-
-    // Data stack
-    defjs("dsp@", function fetchDataStackPointer() {
-        // TODO ? -  DSP@
-        next();
-    });
-
-    defjs("dsp!", function storeDataStackPointer() {
-        // TODO ? -  DSP!
-        next();
-    });
-
-    defjs("char", function char() {
-        dataStack.push(readWord().charAt(0));
-        next();
-    });
-
-    defjs(".", function print() {
-        var top = dataStack.pop();
-
-        var value;
-        if (typeof top === "undefined")
-            value = "undefined";
-        else if (top === null)
-            value = "null";
-        else
-            value = top.toString(base()); // Output numbers in current base
-
-        output += value;
+        stack.push(returnStack[returnStack.length - 2]);
+        stack.push(returnStack[returnStack.length - 1]);
         next();
     });
 
@@ -620,11 +758,11 @@ function Forth(global) {
     //
     // When compiling it should resolve global names immediately.
     function jsNewCall(path) {
-        var constructor = dataStack.pop();
+        var constructor = stack.pop();
         var argsCount = parseInt(path.match(/\{(\d*)\}/)[1] || 0);
         var args = [null]; // new replaces the first argument with this
         for (var j = 0; j < argsCount; j++) {
-            args.push(dataStack.pop());
+            args.push(stack.pop());
         }
         // Use new operator with any number of arguments
         return new(Function.prototype.bind.apply(constructor, args))();
@@ -632,12 +770,12 @@ function Forth(global) {
 
     function jsFunctionCall(path) {
         var argsCount = parseInt(path.match(/\{(\d*)\}/)[1] || 0);
-        var obj = dataStack.pop();
+        var obj = stack.pop();
         path = path.match(/[^\{]*/)[0];
         var func = path ? obj[path] : obj;
         var args = [];
         for (var j = 0; j < argsCount; j++) {
-            args.push(dataStack.pop());
+            args.push(stack.pop());
         }
         return func.apply(obj, args);
     }
@@ -648,7 +786,7 @@ function Forth(global) {
 
     function jsInterop(js) {
         if (js.startsWith("/")) { // Add global to stack
-            dataStack.push(global);
+            stack.push(global);
         } else if (!js.startsWith(".")) {
             throw "js interop call must start with '/' or '.'";
         }
@@ -659,19 +797,19 @@ function Forth(global) {
             var path = paths[i];
 
             if (path.match(jsAssignmentRegex)) {
-                dataStack.pop()[path.substring(0, path.length - 1)] = dataStack.pop();
+                stack.pop()[path.substring(0, path.length - 1)] = stack.pop();
             } else if (path.match(jsNewCallRegex)) {
-                dataStack.push(jsNewCall(path));
+                stack.push(jsNewCall(path));
             } else if (path.match(jsFunctionCallRegex)) {
-                dataStack.push(jsFunctionCall(path));
+                stack.push(jsFunctionCall(path));
             } else { // Property access
-                dataStack.push(dataStack.pop()[path]);
+                stack.push(stack.pop()[path]);
             }
         }
     }
 
     var JS = defjs("js", function js() {
-        jsInterop(dataStack.pop());
+        jsInterop(stack.pop());
         next();
     });
 
@@ -686,52 +824,37 @@ function Forth(global) {
         next();
     }, true);
 
-    defjs("cr", function cr() {
-        output += "\n";
-        next();
-    });
-
     defjs("clearReturnStack", function clearReturnStack() {
         returnStack.length = 0;
         next();
     });
 
-    function defword(name, words, immediate, hidden) {
-        var codeFieldAddress = wordDefinitions.length + 1;
-
-        defheader(name, immediate, hidden);
-        wordDefinitions.push(enter);
+    function defword(name, words, immediate) {
+        defheader(name, immediate);
+        var enter = compileEnter();
         wordDefinitions = wordDefinitions.concat(
             words.map(function(word) {
                 if (typeof word !== "string") {
                     return word;
                 } else {
-                    return find(word) + 1;
+                    return wordDefinitions[findDefinition(word).executionToken];
                 }
             })
         );
-
-        return codeFieldAddress;
+        return enter;
     }
-
-    defword("hide", [
-        "word", // Get the word (after 'hide')
-        "find", // Look up in the dictionary
-        "hidden", // Make word hidden
-        "exit", // Return from the function
-    ]);
 
     defjs(":", function colon() {
         defheader(readWord(), false, true);
-        wordDefinitions.push(enter);
+        compileEnter();
         compiling(true);
         next();
     });
 
     defjs(":noname", function noname() {
         defheader("", false, true);
-        dataStack.push(wordDefinitions.length);
-        wordDefinitions.push(enter);
+        stack.push(wordDefinitions.length);
+        compileEnter();
         compiling(true);
         next();
     });
@@ -745,16 +868,16 @@ function Forth(global) {
 
     var _does = defjs("_does", function _does() {
         var wordPosition = latest();
-        var doDoesPosition = nextWord;
+        var doDoesPosition = instructionPointer;
 
         wordDefinitions[wordPosition + 1] = function doDoes() {
-            dataStack.push(wordPosition + 2);
-            returnStack.push(nextWord);
-            nextWord = doDoesPosition;
+            stack.push(wordPosition + 2);
+            returnStack.push(instructionPointer);
+            instructionPointer = doDoesPosition;
             next();
         };
 
-        nextWord = returnStack.pop();
+        instructionPointer = returnStack.pop();
         next();
     });
 
@@ -764,50 +887,47 @@ function Forth(global) {
     }, true); // Immediate
 
     var _do = defjs("_do", function _do() {
-        returnStack.push(wordDefinitions[nextWord++]);
-        var top = dataStack.pop();
-        returnStack.push(dataStack.pop());
+        returnStack.push(wordDefinitions[instructionPointer++]);
+        var top = stack.pop();
+        returnStack.push(stack.pop());
         returnStack.push(top);
         next();
     });
     defjs("do", function do_() {
         wordDefinitions.push(_do);
         wordDefinitions.push(0); // Dummy endLoop
-        dataStack.push(wordDefinitions.length-1);
+        stack.push(wordDefinitions.length - 1);
         next();
     }, true); // Immediate
 
-    var _plusLoop = defjs("_+loop", function _plusLoop() {
-        var step = dataStack.pop();
+    function _plusLoop() {
+        var step = stack.pop();
         var index = returnStack.pop();
         var limit = returnStack.pop();
-        if (index < limit && index+step < limit || index >= limit && index+step >= limit) {
+        if (index < limit && index + step < limit || index >= limit && index + step >= limit) {
             returnStack.push(limit);
-            returnStack.push(index+step);
-            nextWord += wordDefinitions[nextWord];
+            returnStack.push(index + step);
+            instructionPointer += wordDefinitions[instructionPointer];
         } else {
             returnStack.pop();
-            nextWord++;
+            instructionPointer++;
         }
         next();
-    });
+    };
 
-    defjs("loop", function loop() {
-        wordDefinitions.push(LIT);
-        wordDefinitions.push(1);
+    var plusLoop = defjs("+loop", function plusLoop() {
         wordDefinitions.push(_plusLoop);
-
-        var doPosition = dataStack.pop();
+        var doPosition = stack.pop();
         wordDefinitions.push(doPosition - wordDefinitions.length + 1);
         wordDefinitions[doPosition] = wordDefinitions.length;
         next();
     }, true); // Immediate
 
-    defjs("+loop", function plusLoop() {
-        wordDefinitions.push(_plusLoop);
-        wordDefinitions.push(dataStack.pop() - wordDefinitions.length);
-        next();
-    }, true); // Immediate
+    defjs("loop", function loop() {
+        wordDefinitions.push(LIT);
+        wordDefinitions.push(1);
+        plusLoop();
+    }, true) // Immediate
 
     defjs("unloop", function unloop() {
         returnStack.pop();
@@ -819,22 +939,22 @@ function Forth(global) {
     defjs("leave", function leave() {
         returnStack.pop();
         returnStack.pop();
-        nextWord = returnStack.pop();
+        instructionPointer = returnStack.pop();
         next();
     });
 
     defjs("i", function i() {
-        dataStack.push(returnStack[returnStack.length-1]);
+        stack.push(returnStack[returnStack.length - 1]);
         next();
     });
 
     defjs("j", function j() {
-        dataStack.push(returnStack[returnStack.length-4]);
+        stack.push(returnStack[returnStack.length - 4]);
         next();
     });
 
     defjs("recurse", function recurse() {
-        wordDefinitions.push(latest() + 1);
+        wordDefinitions.push(wordDefinitions[latest() + 1]);
         next();
     }, true); // Immediate
 
@@ -842,43 +962,56 @@ function Forth(global) {
         "[", // Enter interpretation state
         "clearReturnStack", // Clear the return stack
         "interpret", // Interpret the next word ..
-        "branch", -2 // .. and loop forever
+        "jump", -2 // .. and loop forever
     ]);
 
-    // Set the initial word
-    currentWord = quit;
+    function abort(error) {
+        stack.length = 0;
+        throw error || "";
+    }
+    defjs("abort", abort);
 
-    // As js doesn't support tail call optimisation on most browsers the run
-    // function uses a trampoline to run forth
+    defjs('abort"', function abortQuote() {
+        var addressLength = _parse('"');
+        var error = input.substring(addressLength[0], addressLength[0] + addressLength[1] + 1);
+        wordDefinitions.push(function abortQuote() {
+            if (stack.pop())
+                abort(error);
+            else
+                next();
+        });
+        next();
+    }, true); // Immediate
+
+    // Set the initial word
+    currentInstruction = quit;
+
+    // As js doesn't support tail call optimisation the
+    // run function uses a trampoline to execute forth code
     this.run = function(inp) {
         output = "";
-        input = inp;
-        cursor(0);
-
-        // console.log(wordDefinitions);
+        inputBufferPosition = input.length;
+        toIn(0);
+        input += inp + "\n";
 
         try {
-            while (true) {
-                // console.log(wordDefinitions);
-                // console.log("IN: " + input);
-                // console.log(wordDefinitions[currentWord - 1]);
-                // console.log(wordDefinitions.slice(latest()));
-                // console.log("JA: " + jsArray[wordDefinitions[currentWord]]);
-
-                wordDefinitions[currentWord]();
-                // console.log("CW2" + currentWord);
-                // console.log(dataStack);
-            }
+            while (true)
+                currentInstruction();
         } catch (err) {
             if (err !== EndOfInput) {
-                currentWord = quit;
+                currentInstruction = quit;
+                stack.length = 0;
+                console.log("Exception at:\n" + returnStack.map(function(r) {
+                    return r - 1 + " " + wordDefinitions[r - 1];
+                }).join("\n") + "\n");
+                console.log(output);
                 throw err;
             }
         }
         return output;
     };
 
-    this.stack = dataStack;
+    this.stack = stack;
     this.definitions = wordDefinitions;
 }
 
@@ -887,9 +1020,13 @@ process.on('uncaughtException', function(err) {
     process.exit();
 });
 
-require('fs').readFile('./forth.f', function (err, data) {
+var js = require('fs');
+js.readFile('./forth.f', function(err, data) {
     var forth = new Forth(global);
     if (err) throw err;
     console.log(forth.run(data.toString()));
-    process.exit();
+    js.readFile('./ans-forth-tests.f', function(err, tests) {
+        console.log(forth.run(tests.toString()));
+        process.exit();
+    });
 });
