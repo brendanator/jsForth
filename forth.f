@@ -33,25 +33,11 @@
 : begin here ; immediate
 : again ['] jump compile, here - , ; immediate
 : until ['] jumpIfFalse compile, here - , ; immediate
-: while ['] jumpIfFalse compile, 0 , here swap ; immediate
+: while ['] jumpIfFalse compile, 0 , here 1- swap ; immediate
 : repeat ['] jump compile, here - , postpone then ; immediate
 
 \ ( ... ) Comments
-: (
-    1                       \ allowed nested parens by keeping track of depth
-    begin
-        key                 \ read next character
-        dup [char] ( = if   \ open paren?
-            drop            \ drop the open paren
-            1+              \ depth increases
-        else
-            [char] ) = if   \ close paren?
-                1-          \ depth decreases
-            then
-        then
-    dup 0 = until           \ continue until we reach matching close paren, depth 0
-    drop                    \ drop the depth counter
-; immediate
+: ( [char] ) parse 2drop ; immediate
 
 : s"
     ['] lit compile,
