@@ -32,24 +32,36 @@ function Forth(global) {
         latest(wordDefinitions.length - 1);
     }
 
-    function defjs(name, f, immediate) {
-        defheader(name, immediate);
+    function defjs(name, f, immediate, displayName) {
+        defheader(displayName || name, immediate);
         wordDefinitions.push(f);
         return f;
     }
 
-    function compileEnter() {
+    function compileEnter(name) {
         var instruction = wordDefinitions.length + 1;
 
-        function enter() {
-            returnStack.push(instructionPointer);
-            instructionPointer = instruction;
+        var enter;
+        try {
+            enter = eval(`(
+                function ${name}() {
+                    returnStack.push(instructionPointer);
+                    instructionPointer = instruction;
+                })
+            `);
+        } catch (e) {
+            // Failback for names that are invalid identifiers
+            enter = function enter() {
+                returnStack.push(instructionPointer);
+                instructionPointer = instruction;
+            };
         }
+
         wordDefinitions.push(enter);
         return enter;
     }
 
-    defjs("exit", function exit() {
+    var exit = defjs("exit", function exit() {
         instructionPointer = returnStack.pop();
     });
 
@@ -106,8 +118,9 @@ function Forth(global) {
         instructionPointer += 1;
     });
 
+    var SOURCE = 1 << 31; // Address offset to indicate input addresses 
     var input = "";
-    var SOURCE = 1 << 31;
+    var inputEnd = 0;
     var inputBufferPosition = 0;
     var inputBufferLength = -1;
     var EndOfInput = (function() {})();
@@ -122,63 +135,42 @@ function Forth(global) {
         inputBufferLength = input.substring(inputBufferPosition).search(/\n/);
         toIn(0);
         return inputBufferLength >= 0;
-        // if (input) {
-        //     toIn(0);
-        //     inputBuffer = "";
-        //     while (input && !inputBuffer) {
-        //         var newLineIndex = input.search(/\n/);
-        //         if (newLineIndex >= 0) {
-        //             inputBuffer = input.substring(0, newLineIndex);
-        //             input = input.substring(newLineIndex + 1);
-        //         } else {
-        //             inputBuffer = input;
-        //             input = "";
-        //         }
-        //     }
-        //     return true;
-        // } else
-        //     return false;
     }
     defjs("refill", function refill() {
         stack.push(_refill());
     });
 
     function readKey() {
-        if (toIn() > inputBufferLength) {
-            if (!_refill()) throw EndOfInput;
-        }
+        if (toIn() > inputBufferLength)
+            _refill();
 
-        var key = input.charCodeAt(inputBufferPosition + toIn());
+        var keyPosition = inputBufferPosition + toIn();
         toIn(toIn() + 1);
-        return key;
 
-        // if (toIn() >= inputBuffer.length) {
-        //     if (_refill())
-        //         return "\n";
-        //     else
-        //         throw EndOfInput;
-        // } else {
-        //     var key = inputBuffer.charAt(toIn());
-        //     toIn(toIn() + 1);
-        //     return key;
-        // }
+        if (keyPosition < inputEnd)
+            return input.charAt(keyPosition);
+        else if (keyPosition == inputEnd)
+            return " ";
+        else
+            throw EndOfInput;
+
     }
     defjs("key", function key() {
-        stack.push(readKey());
+        stack.push(readKey().charCodeAt(0));
     });
 
     function readWord() {
         var word = "";
         var key;
         while (true) {
-            key = String.fromCharCode(readKey());
+            key = readKey();
             if (!key.match(/\s/))
                 break;
         }
 
         while (!key.match(/\s/)) {
             word += key;
-            key = String.fromCharCode(readKey());
+            key = readKey();
         }
 
         return word;
@@ -188,7 +180,7 @@ function Forth(global) {
     });
 
     function _parse(delimiter) {
-        if (typeof delimiter === "string") delimiter = delimiter.charCodeAt(0);
+        if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
         var address = SOURCE + inputBufferPosition + toIn();
         var length = 0;
         var key = readKey();
@@ -206,6 +198,28 @@ function Forth(global) {
 
     defjs("char", function char() {
         stack.push(readWord().charCodeAt(0));
+    });
+
+    defjs("accept", function accept() {
+        var currentInputEnd = inputEnd;
+        var currentInputBufferPosition = inputBufferPosition;
+        var currentInputBufferLength = inputBufferLength;
+        var currentToIn = toIn();
+
+        var maxLength = stack.pop();
+        var address = stack.pop();
+        console.log(currentInstruction.name);
+        currentInstruction = function acceptCallback() {
+            var lengthReceived = Math.min(maxLength, inputBufferLength);
+            stack.push(1);
+            setAddress(address, input.substring(inputBufferPosition, inputBufferPosition + lengthReceived).split("\n")[0]);
+
+            inputEnd = currentInputEnd;
+            inputBufferPosition = currentInputBufferPosition;
+            inputBufferLength = currentInputBufferLength;
+            toIn(currentToIn);
+        };
+        throw EndOfInput;
     });
 
     var output = "";
@@ -237,7 +251,6 @@ function Forth(global) {
             output += String.fromCharCode(value);
         else
             output += value;
-
     });
 
     defjs("type", function type() {
@@ -245,26 +258,25 @@ function Forth(global) {
         var address = stack.pop();
         for (var i = 0; i < length; i++) {
             var value = getAddress(address + i);
-            if (typeof value === "number")
+            if (typeof value === "number") {
                 output += String.fromCharCode(value);
-            else
+            } else
                 output += value;
         }
     });
 
     function _parseInt(string, base) {
+        var int = 0;
         if (string[0] !== "-") { // Positive
-            var int = 0;
             for (var i = 0; i < string.length; i++) {
                 int *= base;
                 int += parseInt(string[i], base);
             }
             return int;
         } else {
-            var int = 0;
-            for (var i = 1; i < string.length; i++) {
+            for (var j = 1; j < string.length; j++) {
                 int *= base;
-                int -= parseInt(string[i], base);
+                int -= parseInt(string[j], base);
             }
             return int;
         }
@@ -296,7 +308,7 @@ function Forth(global) {
         return _parseInt(string[0], base);
     }
 
-    defjs("interpret", function interpret() {
+    function interpretWord() {
         var word = readWord();
         var definition = findDefinition(word);
         if (definition) {
@@ -316,7 +328,7 @@ function Forth(global) {
                 stack.push(num);
             }
         }
-    });
+    }
 
     // Converts an execution token into the data field address
     defjs(">body", function dataFieldAddress() {
@@ -324,7 +336,7 @@ function Forth(global) {
     });
 
     defjs("create", function create() {
-        defheader(readWord(), false, false);
+        defheader(readWord());
         var dataFieldAddress = wordDefinitions.length + 1;
         wordDefinitions.push(function pushDataFieldAddress() {
             stack.push(dataFieldAddress);
@@ -572,32 +584,32 @@ function Forth(global) {
 
     defjs("=", function equal() {
         var first = stack.pop();
-        stack[stack.length - 1] = stack[stack.length - 1] == first ? -1 : 0;
+        stack[stack.length - 1] = stack[stack.length - 1] == first;
     });
 
     defjs("<>", function notEqual() {
         var first = stack.pop();
-        stack[stack.length - 1] = stack[stack.length - 1] != first ? -1 : 0;
+        stack[stack.length - 1] = stack[stack.length - 1] != first;
     });
 
     defjs("<", function lessThan() {
         var first = stack.pop();
-        stack[stack.length - 1] = stack[stack.length - 1] < first ? -1 : 0;
+        stack[stack.length - 1] = stack[stack.length - 1] < first;
     });
 
     defjs(">", function greaterThan() {
         var first = stack.pop();
-        stack[stack.length - 1] = stack[stack.length - 1] > first ? -1 : 0;
+        stack[stack.length - 1] = stack[stack.length - 1] > first;
     });
 
     defjs("<=", function lessThanEqual() {
         var first = stack.pop();
-        stack[stack.length - 1] = stack[stack.length - 1] <= first ? -1 : 0;
+        stack[stack.length - 1] = stack[stack.length - 1] <= first;
     });
 
     defjs(">=", function greaterThanEqual() {
         var first = stack.pop();
-        stack[stack.length - 1] = stack[stack.length - 1] >= first ? -1 : 0;
+        stack[stack.length - 1] = stack[stack.length - 1] >= first;
     });
 
     defjs("unsigned", function unsigned() {
@@ -739,40 +751,25 @@ function Forth(global) {
         returnStack.length = 0;
     });
 
-    function defword(name, words, immediate) {
-        defheader(name, immediate);
-        var enter = compileEnter();
-        wordDefinitions = wordDefinitions.concat(
-            words.map(function(word) {
-                if (typeof word !== "string") {
-                    return word;
-                } else {
-                    return wordDefinitions[findDefinition(word).executionToken];
-                }
-            })
-        );
-        return enter;
-    }
-
     defjs(":", function colon() {
-        defheader(readWord(), false, true);
-        compileEnter();
+        var name = readWord();
+        defheader(name, false, true);
+        compileEnter(name);
         compiling(true);
     });
 
     defjs(":noname", function noname() {
         defheader("", false, true);
         stack.push(wordDefinitions.length);
-        compileEnter();
+        compileEnter("_noname_");
         compiling(true);
     });
 
-    defword(";", [
-        "lit", "exit", ",", // Append 'exit' (so the word will return)
-        "latest", "@", "hidden", // Toggle hidden flag -- unhide the word
-        "[", // Go back to immediate mode
-        "exit" // Return from the function
-    ], true); // Immediate
+    defjs(";", function semicolon() {
+        wordDefinitions.push(exit);
+        wordDefinitions[latest()].hidden = false;
+        compiling(false);
+    }, true); // Immediate
 
     var _does = defjs("_does", function _does() {
         var wordPosition = latest();
@@ -815,7 +812,7 @@ function Forth(global) {
             returnStack.pop();
             instructionPointer++;
         }
-    };
+    }
 
     var plusLoop = defjs("+loop", function plusLoop() {
         wordDefinitions.push(_plusLoop);
@@ -828,7 +825,7 @@ function Forth(global) {
         wordDefinitions.push(LIT);
         wordDefinitions.push(1);
         plusLoop();
-    }, true) // Immediate
+    }, true); // Immediate
 
     defjs("unloop", function unloop() {
         returnStack.pop();
@@ -854,11 +851,30 @@ function Forth(global) {
         wordDefinitions.push(wordDefinitions[latest() + 1]);
     }, true); // Immediate
 
+    function defword(name, words, immediate, displayName) {
+        defheader(name, immediate);
+        var enter = compileEnter(displayName || name);
+        wordDefinitions = wordDefinitions.concat(
+            words.map(function(word) {
+                if (typeof word !== "string") {
+                    return word;
+                } else {
+                    return wordDefinitions[findDefinition(word).executionToken];
+                }
+            })
+        );
+        return enter;
+    }
+
+    var interpret = defword("interpret", [
+        interpretWord, // Interpret the next word ..
+        "jump", -2 // .. and loop forever
+    ], "semicolon");
+
     var quit = defword("quit", [
         "[", // Enter interpretation state
         "clearReturnStack", // Clear the return stack
-        "interpret", // Interpret the next word ..
-        "jump", -2 // .. and loop forever
+        "interpret" // Run the intepreter
     ]);
 
     function abort(error) {
@@ -876,6 +892,42 @@ function Forth(global) {
         });
     }, true); // Immediate
 
+    defjs("evaluate", function evaluate() {
+        var currentInputEnd = inputEnd;
+        var currentInputBufferPosition = inputBufferPosition;
+        var currentInputBufferLength = inputBufferLength;
+        var currentToIn = toIn();
+        var currentReturnStackLength = returnStack.length;
+        var currentInstructionPointer = instructionPointer;
+
+        inputBufferLength = stack.pop();
+        inputBufferPosition = stack.pop() - SOURCE;
+        inputEnd = inputBufferPosition + inputBufferLength;
+        toIn(0);
+
+        var evaluateInstruction = interpret;
+
+        try {
+            // As js doesn't support tail call optimisation the
+            // run function uses a trampoline to execute forth code
+            while (true) {
+                evaluateInstruction();
+                evaluateInstruction = wordDefinitions[instructionPointer++];
+            }
+        } catch (err) {
+            if (err == EndOfInput) {
+                inputEnd = currentInputEnd;
+                inputBufferPosition = currentInputBufferPosition;
+                inputBufferLength = currentInputBufferLength;
+                toIn(currentToIn);
+                instructionPointer = currentInstructionPointer;
+                returnStack.length = currentReturnStackLength;
+            } else {
+                throw err;
+            }
+        }
+    });
+
     // Set the initial word
     var currentInstruction = quit;
 
@@ -884,6 +936,7 @@ function Forth(global) {
         inputBufferPosition = input.length;
         toIn(0);
         input += inp + "\n";
+        inputEnd = input.length - 1;
 
         try {
             // As js doesn't support tail call optimisation the
@@ -894,18 +947,25 @@ function Forth(global) {
             }
         } catch (err) {
             if (err !== EndOfInput) {
+                console.log("Exception " + err + " at:\n" + printStackTrace());
+                console.log(input.substring(inputBufferPosition, inputBufferPosition + inputBufferLength));
+                console.log(output);
                 currentInstruction = quit;
                 stack.length = 0;
-                console.log("Exception at:\n" + returnStack.map(function(r) {
-                    return r - 1 + " " + wordDefinitions[r - 1];
-                }).join("\n") + "\n");
-                console.log(output);
                 throw err;
             }
         }
         return output;
     };
 
+    function printStackTrace() {
+        var stackTrace = "    " + currentInstruction.name + " @ " + (instructionPointer - 1);
+        for (var i = returnStack.length - 1; i >= 0; i--) {
+            var instruction = returnStack[i];
+            stackTrace += "\n    " + wordDefinitions[instruction - 1].name + " @ " + (instruction - 1);
+        }
+        return stackTrace;
+    }
     this.stack = stack;
     this.definitions = wordDefinitions;
 }
@@ -922,6 +982,7 @@ js.readFile('./forth.f', function(err, data) {
     console.log(forth.run(data.toString()));
     js.readFile('./ans-forth-tests.f', function(err, tests) {
         console.log(forth.run(tests.toString()));
+        console.log(forth.run("some magic input!"));
         process.exit();
     });
 });
