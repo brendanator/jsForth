@@ -35,15 +35,13 @@
 : literal ['] lit compile, , ; immediate
 : [char] char postpone literal ; immediate
 
+: t [char] t ;
 \ ( ... ) Comments
 : (  begin key [char] ) = until ; immediate
 : .( [char] ) parse type ; immediate
 : s" [char] " parse swap postpone literal postpone literal ; immediate
 : ." [char] " parse swap postpone literal postpone literal ['] type compile, ; immediate
-( test )
-(
-    test1
-)
+
 : cell 1 ;
 : cell+ 1+ ;
 : cells ;
@@ -87,7 +85,7 @@
 : 0<= 0 <= ;
 : 0>= 0 >= ;
 
-4294967296 constant max-uint
+32 2 js /Math.pow{2} constant max-uint
 : floor js /Math.floor{1} ;
 : / / floor ;
 : /mod 2dup mod -rot / ;

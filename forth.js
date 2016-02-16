@@ -1,10 +1,39 @@
+function Stack() {
+    var data = [];
+
+    return {
+        pop: function() {
+            if (data.length > 0)
+                return data.pop();
+            else
+                throw "Stack empty";
+        },
+        push: function(element) {
+            data.push(element);
+        },
+        peek: function(offset) {
+            var index = data.length - (offset || 1);
+            if (0 <= index && index < data.length)
+                return data[index];
+            else
+                throw "Attempted to access invalid stack index " + index;
+        },
+        length: function() {
+            return data.length;
+        },
+        clear: function() {
+            data.length = 0;
+        }
+    };
+}
+
 var ForthData = function() {
     var f = {};
 
     f.instructionPointer = 0;
     f.wordDefinitions = [];
-    f.returnStack = [];
-    f.stack = [];
+    f.returnStack = Stack();
+    f.stack = Stack();
 
     return f;
 };
@@ -116,7 +145,7 @@ function ForthInterals(f) {
     }
 
     var compiling = defvar("state", 0);
-    f._latest = defvar("f._latest", f.wordDefinitions.length); // Replace existing function definition
+    f._latest = defvar("latest", f.wordDefinitions.length); // Replace existing function definition
     var base = defvar("base", 10);
     var toIn = defvar(">in", 0);
 
@@ -126,7 +155,7 @@ function ForthInterals(f) {
 
     var _lit = defjs("lit", function lit() {
         f.stack.push(f.wordDefinitions[f.instructionPointer]);
-        f.instructionPointer += 1;
+        f.instructionPointer++;
     });
 
     var SOURCE = 1 << 31; // Address offset to indicate input addresses 
@@ -256,17 +285,14 @@ function ForthInterals(f) {
 
     defjs(".", function dot() {
         var value;
-        if (f.stack.length) {
-            var top = f.stack.pop();
+        var top = f.stack.pop();
 
-            if (typeof top === "undefined")
-                value = "undefined";
-            else if (top === null)
-                value = "null";
-            else
-                value = top.toString(base()); // Output numbers in current base
-        } else
-            value = "Stack empty";
+        if (typeof top === "undefined")
+            value = "undefined";
+        else if (top === null)
+            value = "null";
+        else
+            value = top.toString(base()); // Output numbers in current base
 
         output += value + " ";
     });
@@ -358,7 +384,7 @@ function ForthInterals(f) {
 
     // Converts an execution token into the data field address
     defjs(">body", function dataFieldAddress() {
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] + 1;
+        f.stack.push(f.stack.pop() + 1);
     });
 
     defjs("create", function create() {
@@ -410,6 +436,7 @@ function ForthInterals(f) {
     function setAddress(address, value) {
         if (address < 0) {
             // TODO ?
+            console.log(input.substring(inputBufferPosition, inputBufferPosition+ 100));
             throw "Changing SOURCE";
         } else {
             f.wordDefinitions[address] = value;
@@ -469,52 +496,44 @@ function ForthInterals(f) {
     });
 
     defjs("1+", function inc() {
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] + 1;
+        f.stack.push(f.stack.pop() + 1);
     });
 
     defjs("1-", function dec() {
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] - 1;
+        f.stack.push(f.stack.pop() - 1);
     });
 
     defjs("2*", function inc() {
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] << 1;
+        f.stack.push(f.stack.pop() << 1);
     });
 
     defjs("2/", function inc() {
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] >> 1;
-    });
-
-    defjs("4+", function inc4() {
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] + 4;
-    });
-
-    defjs("4-", function dec4() {
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] - 4;
+        f.stack.push(f.stack.pop() >> 1);
     });
 
     defjs("+", function plus() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] + first;
+        f.stack.push(f.stack.pop() + first);
     });
 
     defjs("-", function minus() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] - first;
+        f.stack.push(f.stack.pop() - first);
     });
 
     defjs("*", function multiply() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] * first;
+        f.stack.push(f.stack.pop() * first);
     });
 
     defjs("/", function divide() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] / first;
+        f.stack.push(f.stack.pop() / first);
     });
 
     defjs("mod", function mod() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] % first;
+        f.stack.push(f.stack.pop() % first);
     });
 
     defjs("abs", function abs() {
@@ -556,21 +575,21 @@ function ForthInterals(f) {
 
     defjs("and", function and() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] & first;
+        f.stack.push(f.stack.pop() & first);
     });
 
     defjs("or", function or() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] | first;
+        f.stack.push(f.stack.pop() | first);
     });
 
     defjs("xor", function xor() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] ^ first;
+        f.stack.push(f.stack.pop() ^ first);
     });
 
     defjs("invert", function invert() {
-        f.stack[f.stack.length - 1] = ~f.stack[f.stack.length - 1];
+        f.stack.push(~f.stack.pop());
     });
 
 
@@ -651,7 +670,7 @@ function ForthInterals(f) {
     }, true);
 
     defjs("clearReturnStack", function clearReturnStack() {
-        f.returnStack.length = 0;
+        f.returnStack.clear();
     });
 
     defjs(":", function colon() {
@@ -719,7 +738,7 @@ function ForthInterals(f) {
     ]);
 
     function abort(error) {
-        f.stack.length = 0;
+        f.stack.clear();
         throw error || "";
     }
     defjs("abort", abort);
@@ -738,7 +757,6 @@ function ForthInterals(f) {
         var currentInputBufferPosition = inputBufferPosition;
         var currentInputBufferLength = inputBufferLength;
         var currentToIn = toIn();
-        var currentReturnStackLength = f.returnStack.length;
         var currentInstructionPointer = f.instructionPointer;
 
         inputBufferLength = f.stack.pop();
@@ -762,7 +780,8 @@ function ForthInterals(f) {
                 inputBufferLength = currentInputBufferLength;
                 toIn(currentToIn);
                 f.instructionPointer = currentInstructionPointer;
-                f.returnStack.length = currentReturnStackLength;
+                // Pop interpret from returnStack
+                f.returnStack.pop();
             } else {
                 throw err;
             }
@@ -786,11 +805,11 @@ function ForthInterals(f) {
             }
         } catch (err) {
             if (err !== EndOfInput) {
+                console.log(output);
                 console.log("Exception " + err + " at:\n" + printStackTrace());
                 console.log(input.substring(inputBufferPosition, inputBufferPosition + inputBufferLength));
-                console.log(output);
                 f.currentInstruction = quit;
-                f.stack.length = 0;
+                f.stack.clear();
                 throw err;
             }
         }
@@ -817,32 +836,32 @@ function ComparisonOperations(f) {
 
     f.defjs("=", function equal() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] == first;
+        f.stack.push(f.stack.pop() == first);
     });
 
     f.defjs("<>", function notEqual() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] != first;
+        f.stack.push(f.stack.pop() != first);
     });
 
     f.defjs("<", function lessThan() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] < first;
+        f.stack.push(f.stack.pop() < first);
     });
 
     f.defjs(">", function greaterThan() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] > first;
+        f.stack.push(f.stack.pop() > first);
     });
 
     f.defjs("<=", function lessThanEqual() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] <= first;
+        f.stack.push(f.stack.pop() <= first);
     });
 
     f.defjs(">=", function greaterThanEqual() {
         var first = f.stack.pop();
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 1] >= first;
+        f.stack.push(f.stack.pop() >= first);
     });
 
     return f;
@@ -850,37 +869,41 @@ function ComparisonOperations(f) {
 
 function StackOperations(f) {
 
-    // Stack operations
     f.defjs("drop", function drop() {
         f.stack.pop();
     });
 
     f.defjs("swap", function swap() {
-        var first = f.stack[f.stack.length - 1];
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 2];
-        f.stack[f.stack.length - 2] = first;
+        var first = f.stack.pop();
+        var second = f.stack.pop();
+        f.stack.push(first);
+        f.stack.push(second);
     });
 
     f.defjs("dup", function dup() {
-        f.stack[f.stack.length] = f.stack[f.stack.length - 1];
+        f.stack.push(f.stack.peek());
     });
 
     f.defjs("over", function over() {
-        f.stack[f.stack.length] = f.stack[f.stack.length - 2];
+        f.stack.push(f.stack.peek(2));
     });
 
     f.defjs("rot", function rot() {
-        var third = f.stack[f.stack.length - 3];
-        f.stack[f.stack.length - 3] = f.stack[f.stack.length - 2];
-        f.stack[f.stack.length - 2] = f.stack[f.stack.length - 1];
-        f.stack[f.stack.length - 1] = third;
+        var first = f.stack.pop();
+        var second = f.stack.pop();
+        var third = f.stack.pop();
+        f.stack.push(second);
+        f.stack.push(first);
+        f.stack.push(third);
     });
 
     f.defjs("-rot", function backRot() {
-        var first = f.stack[f.stack.length - 1];
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 2];
-        f.stack[f.stack.length - 2] = f.stack[f.stack.length - 3];
-        f.stack[f.stack.length - 3] = first;
+        var first = f.stack.pop();
+        var second = f.stack.pop();
+        var third = f.stack.pop();
+        f.stack.push(first);
+        f.stack.push(third);
+        f.stack.push(second);
     });
 
     f.defjs("2drop", function twoDrop() {
@@ -889,31 +912,33 @@ function StackOperations(f) {
     });
 
     f.defjs("2dup", function twoDup() {
-        f.stack[f.stack.length] = f.stack[f.stack.length - 2];
-        f.stack[f.stack.length] = f.stack[f.stack.length - 2];
+        f.stack.push(f.stack.peek(2));
+        f.stack.push(f.stack.peek(2));
     });
 
-    f.defjs("2over", function twoDup() {
-        f.stack[f.stack.length] = f.stack[f.stack.length - 4];
-        f.stack[f.stack.length] = f.stack[f.stack.length - 4];
+    f.defjs("2over", function twoOver() {
+        f.stack.push(f.stack.peek(4));
+        f.stack.push(f.stack.peek(4));
     });
 
     f.defjs("2swap", function twoSwap() {
-        var first = f.stack[f.stack.length - 1];
-        var second = f.stack[f.stack.length - 2];
-        f.stack[f.stack.length - 1] = f.stack[f.stack.length - 3];
-        f.stack[f.stack.length - 2] = f.stack[f.stack.length - 4];
-        f.stack[f.stack.length - 3] = first;
-        f.stack[f.stack.length - 4] = second;
+        var first = f.stack.pop();
+        var second = f.stack.pop();
+        var third = f.stack.pop();
+        var fourth = f.stack.pop();
+        f.stack.push(second);
+        f.stack.push(first);
+        f.stack.push(fourth);
+        f.stack.push(third);
     });
 
     f.defjs("?dup", function nonZeroDup() {
-        var first = f.stack[f.stack.length - 1];
-        if (first !== 0) f.stack[f.stack.length] = first;
+        var first = f.stack.peek();
+        if (first !== 0) f.stack.push(first);
     });
 
     f.defjs("depth", function depth() {
-        f.stack.push(f.stack.length);
+        f.stack.push(f.stack.length());
     });
 
     // Return f.stack
@@ -926,7 +951,7 @@ function StackOperations(f) {
     });
 
     f.defjs("r@", function rFetch() {
-        f.stack.push(f.returnStack[f.returnStack.length - 1]);
+        f.stack.push(f.returnStack.peek());
     });
 
     f.defjs("2r>", function twoRFrom() {
@@ -942,8 +967,8 @@ function StackOperations(f) {
     });
 
     f.defjs("2r@", function twoRFetch() {
-        f.stack.push(f.returnStack[f.returnStack.length - 2]);
-        f.stack.push(f.returnStack[f.returnStack.length - 1]);
+        f.stack.push(f.returnStack.peek(2));
+        f.stack.push(f.returnStack.peek(1));
     });
 
     return f;
@@ -1002,11 +1027,11 @@ function ControlStructures(f) {
     });
 
     f.defjs("i", function i() {
-        f.stack.push(f.returnStack[f.returnStack.length - 1]);
+        f.stack.push(f.returnStack.peek());
     });
 
     f.defjs("j", function j() {
-        f.stack.push(f.returnStack[f.returnStack.length - 4]);
+        f.stack.push(f.returnStack.peek(4));
     });
 
     f.defjs("recurse", function recurse() {
