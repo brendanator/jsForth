@@ -70,7 +70,7 @@
   </style>
   <script src="forth.js"></script>
   <script>
-    var forth = new Forth(window);
+    var forth = Forth(window);
     function loadForth(file) {
       var xmlhttp = new XMLHttpRequest();
       xmlhttp.onreadystatechange = function() {
@@ -83,7 +83,7 @@
       xmlhttp.send();
     }
     loadForth("forth.f");
-    // loadForth("ans-forth-tests.f");
+    loadForth("ans-forth-tests.f");
 
     var inputHistory = [""];
     var historyCount = 0;
