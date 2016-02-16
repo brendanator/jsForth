@@ -1,45 +1,49 @@
 : \ 10 parse 2drop ; immediate \ Single line comments
+
+\ Built in numeric radices
 : binary 2 base ! ;
 : octal 8 base ! ;
 : decimal 10 base ! ;
 : hex 16 base ! ;
 
-\ Compilation: ( "<spaces>name" -- )
-\   Parse name delimited by a space. Find name.
-\   Append the compilation semantics of name to the current definition.
-: postpone word find 0 = abort" Word not found" compile, ; immediate
+\ Control structures
+: if ['] jumpIfFalse compile, here 0 , ; immediate
+: then dup here swap - swap ! ; immediate
+: else ['] jump compile, here 0 , swap dup here swap - swap ! ; immediate
+: begin here ; immediate
+: again ['] jump compile, here - , ; immediate
+: until ['] jumpIfFalse compile, here - , ; immediate
+: while ['] jumpIfFalse compile, 0 , here 1- swap ; immediate
+: repeat ['] jump compile, here - , dup here swap - swap ! ; immediate
 
 \ Compilation: ( "<spaces>name" -- )
 \   Parse name delimited by a space. Find name.
-\   If name has other than default compilation semantics,
-\     append them to the current definition;
-\   otherwise append the execution semantics of name.
-: [compile] postpone postpone ; immediate
+\   Append the compilation semantics of name to the current definition.
+: postpone 32 word find dup 0 = abort" Word not found" 
+    0 > if
+        compile,
+    else
+        ['] lit compile, ,      \ executionToken literal
+        ['] compile, compile,   \ compile it when run
+    then
+; immediate
 
 \ Compilation: ( x -- )
 \   Append the run-time semantics given below to the current definition.
 \ Run-time: ( -- x )
 \   Place x on the stack.
 : literal ['] lit compile, , ; immediate
-
-: [char] ['] lit compile, char , ; immediate
+: [char] char postpone literal ; immediate
 
 \ ( ... ) Comments
-: (  [char] ) parse 2drop ; immediate
+: (  begin key [char] ) = until ; immediate
 : .( [char] ) parse type ; immediate
 : s" [char] " parse swap postpone literal postpone literal ; immediate
 : ." [char] " parse swap postpone literal postpone literal ['] type compile, ; immediate
-
-: if ['] jumpIfFalse compile, here 0 , ; immediate
-: then dup here swap - swap ! ; immediate
-: else ['] jump compile, here 0 , swap postpone then ; immediate
-
-: begin here ; immediate
-: again ['] jump compile, here - , ; immediate
-: until ['] jumpIfFalse compile, here - , ; immediate
-: while ['] jumpIfFalse compile, 0 , here 1- swap ; immediate
-: repeat ['] jump compile, here - , postpone then ; immediate
-
+( test )
+(
+    test1
+)
 : cell 1 ;
 : cell+ 1+ ;
 : cells ;
@@ -68,7 +72,7 @@
 ;
 
 : nip swap drop ;
-: count dup @ ;
+: count dup 1+ swap @ ;
 
 : constant create , does> @ ;
 : variable create cell allot ;
@@ -84,6 +88,8 @@
 : 0>= 0 >= ;
 
 4294967296 constant max-uint
+: floor js /Math.floor{1} ;
+: / / floor ;
 : /mod 2dup mod -rot / ;
 : s>d max-uint /mod ; \ convert single to double
 : d>s max-uint * + ;
@@ -92,7 +98,7 @@
 : um* unsigned swap unsigned * s>d ;
 : */ -rot * swap / ;
 : um/mod unsigned swap unsigned swap /mod ;
-: fm/mod -rot d>s swap /mod ;
+: fm/mod dup rot / rot / + ;
 : sm/rem -rot d>s swap /mod ;
 : */mod */ ;
 \  ( n1 n2 -- d )
@@ -100,3 +106,5 @@
 : m* * s>d ; \ multiply 2 singles into a double
 
 : u. ( u -- ) unsigned . ;
+
+create pad 128 allot

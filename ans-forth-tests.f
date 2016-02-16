@@ -70,10 +70,11 @@ CREATE EXPECTED-RESULTS 20 CELLS ALLOT
 \ Redefine / to be integer division
 : / / js /Math.floor{1} ;
 : /mod 2dup mod -rot / ;
-: um/mod unsigned swap unsigned swap /mod ;
+: s>d max-uint /mod ; \ convert single to double
+: um/mod unsigned rot d>s unsigned swap /mod ;
 : fm/mod -rot d>s swap /mod ;
 : sm/rem -rot d>s swap /mod ;
-: */mod */ ;
+: */mod rot * swap /mod ;
 : */ -rot * swap / ;
 
 
@@ -708,7 +709,6 @@ TESTING ' ['] FIND EXECUTE IMMEDIATE COUNT LITERAL POSTPONE STATE
 
 { : GT1 123 ; -> }
 { ' GT1 EXECUTE -> 123 }
-1 . 
 { : GT2 ['] GT1 ; IMMEDIATE -> }
 { GT2 EXECUTE -> 123 }
 \ HERE 3 C, CHAR G C, CHAR T C, CHAR 1 C, CONSTANT GT1STRING

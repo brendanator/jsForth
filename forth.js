@@ -78,6 +78,14 @@ function Forth(global) {
     }
     defjs("find", function find() {
         var word = stack.pop();
+        if (typeof word === "number") {
+            var startPosition = word;
+            var length = getAddress(startPosition);
+            word = "";
+            for (var i = 1; i <= length; i++) {
+                word += String.fromCharCode(getAddress(startPosition + i));
+            }
+        }
         var definition = findDefinition(word);
         if (definition) {
             stack.push(definition.executionToken);
@@ -134,59 +142,38 @@ function Forth(global) {
         inputBufferPosition += inputBufferLength + 1;
         inputBufferLength = input.substring(inputBufferPosition).search(/\n/);
         toIn(0);
-        return inputBufferLength >= 0;
+        return inputBufferPosition < inputEnd;
     }
     defjs("refill", function refill() {
         stack.push(_refill());
     });
 
     function readKey() {
-        if (toIn() > inputBufferLength)
-            _refill();
+        if (toIn() > inputBufferLength) {
+            if (!_refill()) throw EndOfInput;
+        }
 
         var keyPosition = inputBufferPosition + toIn();
         toIn(toIn() + 1);
 
-        if (keyPosition < inputEnd)
-            return input.charAt(keyPosition);
-        else if (keyPosition == inputEnd)
-            return " ";
-        else
-            throw EndOfInput;
-
+        return input.charAt(keyPosition);
     }
     defjs("key", function key() {
         stack.push(readKey().charCodeAt(0));
-    });
-
-    function readWord() {
-        var word = "";
-        var key;
-        while (true) {
-            key = readKey();
-            if (!key.match(/\s/))
-                break;
-        }
-
-        while (!key.match(/\s/)) {
-            word += key;
-            key = readKey();
-        }
-
-        return word;
-    }
-    defjs("word", function word() {
-        stack.push(readWord());
     });
 
     function _parse(delimiter) {
         if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
         var address = SOURCE + inputBufferPosition + toIn();
         var length = 0;
-        var key = readKey();
-        while (key !== delimiter) {
-            length++;
-            key = readKey();
+        if (toIn() <= inputBufferLength) {
+            var key = readKey();
+            while (key !== delimiter) {
+                length++;
+                key = readKey();
+            }
+        } else {
+            _refill();
         }
         return [address, length];
     }
@@ -194,6 +181,41 @@ function Forth(global) {
         var addressLength = _parse(stack.pop());
         stack.push(addressLength[0]);
         stack.push(addressLength[1]);
+    });
+
+    function readWord(delimiter) {
+        if (toIn() == inputBufferLength) {
+            _refill();
+        }
+        delimiter = delimiter || /\s/;
+
+        var word = "";
+        var key = readKey();
+
+        // Skip leading delimiters
+        while (key.match(delimiter))
+            key = readKey();
+
+        while (!key.match(delimiter) && toIn() <= inputBufferLength) {
+            word += key;
+            key = readKey();
+        }
+
+        return word;
+    }
+    var wordBufferStart = wordDefinitions.length;
+    wordDefinitions.length += 32;
+    defjs("word", function word() {
+        var delimiter = stack.pop();
+        if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
+        stack.push(wordBufferStart);
+
+        var word = readWord(delimiter);
+        var length = Math.min(word.length, 31);
+        wordDefinitions[wordBufferStart] = length;
+        for (var i = 0; i < length; i++) {
+            wordDefinitions[wordBufferStart + i + 1] = word.charCodeAt(i);
+        }
     });
 
     defjs("char", function char() {
@@ -933,10 +955,11 @@ function Forth(global) {
 
     this.run = function(inp) {
         output = "";
-        inputBufferPosition = input.length;
-        toIn(0);
+        inputBufferPosition = input.length-1;
+        inputBufferLength = 0;
         input += inp + "\n";
         inputEnd = input.length - 1;
+        _refill();
 
         try {
             // As js doesn't support tail call optimisation the
