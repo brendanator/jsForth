@@ -131,11 +131,6 @@ Forth = (function ForthInterals(f) {
     });
 
     var SOURCE = 1 << 31; // Address offset to indicate input addresses 
-    // var input = "";
-    // var inputEnd = 0;
-    // var inputBufferPosition = 0;
-    // var inputBufferLength = -1;
-    var EndOfInput = (function() {})();
 
     defjs("source", function source() {
         var positionLength = currentInput.source();
@@ -193,7 +188,7 @@ Forth = (function ForthInterals(f) {
             toIn(savedToIn);
         };
 
-        throw EndOfInput;
+        throw Input.EndOfInput;
     });
 
     var output = "";
@@ -690,7 +685,7 @@ Forth = (function ForthInterals(f) {
                 evaluateInstruction = f.wordDefinitions[f.instructionPointer++];
             }
         } catch (err) {
-            if (err == EndOfInput) {
+            if (err == Input.EndOfInput) {
                 currentInput = savedInput;
                 toIn(savedToIn);
                 f.instructionPointer = savedInstructionPointer;
@@ -717,7 +712,7 @@ Forth = (function ForthInterals(f) {
                 f.currentInstruction = f.wordDefinitions[f.instructionPointer++];
             }
         } catch (err) {
-            if (err !== EndOfInput) {
+            if (err !== Input.EndOfInput) {
                 console.log(output);
                 console.log("Exception " + err + " at:\n" + printStackTrace());
                 console.log(currentInput.inputBuffer());
@@ -745,212 +740,8 @@ Forth = (function ForthInterals(f) {
     return f;
 }(Forth));
 
-Forth = (function ComparisonOperations(f) {
-    f.defjs("=", function equal() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() == first);
-    });
-
-    f.defjs("<>", function notEqual() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() != first);
-    });
-
-    f.defjs("<", function lessThan() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() < first);
-    });
-
-    f.defjs(">", function greaterThan() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() > first);
-    });
-
-    f.defjs("<=", function lessThanEqual() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() <= first);
-    });
-
-    f.defjs(">=", function greaterThanEqual() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() >= first);
-    });
-
-    return f;
-}(Forth));
-
-Forth = (function StackOperations(f) {
-
-    f.defjs("drop", function drop() {
-        f.stack.pop();
-    });
-
-    f.defjs("swap", function swap() {
-        var first = f.stack.pop();
-        var second = f.stack.pop();
-        f.stack.push(first);
-        f.stack.push(second);
-    });
-
-    f.defjs("dup", function dup() {
-        f.stack.push(f.stack.peek());
-    });
-
-    f.defjs("over", function over() {
-        f.stack.push(f.stack.peek(2));
-    });
-
-    f.defjs("rot", function rot() {
-        var first = f.stack.pop();
-        var second = f.stack.pop();
-        var third = f.stack.pop();
-        f.stack.push(second);
-        f.stack.push(first);
-        f.stack.push(third);
-    });
-
-    f.defjs("-rot", function backRot() {
-        var first = f.stack.pop();
-        var second = f.stack.pop();
-        var third = f.stack.pop();
-        f.stack.push(first);
-        f.stack.push(third);
-        f.stack.push(second);
-    });
-
-    f.defjs("2drop", function twoDrop() {
-        f.stack.pop();
-        f.stack.pop();
-    });
-
-    f.defjs("2dup", function twoDup() {
-        f.stack.push(f.stack.peek(2));
-        f.stack.push(f.stack.peek(2));
-    });
-
-    f.defjs("2over", function twoOver() {
-        f.stack.push(f.stack.peek(4));
-        f.stack.push(f.stack.peek(4));
-    });
-
-    f.defjs("2swap", function twoSwap() {
-        var first = f.stack.pop();
-        var second = f.stack.pop();
-        var third = f.stack.pop();
-        var fourth = f.stack.pop();
-        f.stack.push(second);
-        f.stack.push(first);
-        f.stack.push(fourth);
-        f.stack.push(third);
-    });
-
-    f.defjs("?dup", function nonZeroDup() {
-        var first = f.stack.peek();
-        if (first !== 0) f.stack.push(first);
-    });
-
-    f.defjs("depth", function depth() {
-        f.stack.push(f.stack.length());
-    });
-
-    // Return f.stack
-    f.defjs(">r", function toR() {
-        f.returnStack.push(f.stack.pop());
-    });
-
-    f.defjs("r>", function rFrom() {
-        f.stack.push(f.returnStack.pop());
-    });
-
-    f.defjs("r@", function rFetch() {
-        f.stack.push(f.returnStack.peek());
-    });
-
-    f.defjs("2r>", function twoRFrom() {
-        var top = f.returnStack.pop();
-        f.stack.push(f.returnStack.pop());
-        f.stack.push(top);
-    });
-
-    f.defjs("2>r", function twoToR() {
-        var top = f.stack.pop();
-        f.returnStack.push(f.stack.pop());
-        f.returnStack.push(top);
-    });
-
-    f.defjs("2r@", function twoRFetch() {
-        f.stack.push(f.returnStack.peek(2));
-        f.stack.push(f.returnStack.peek(1));
-    });
-
-    return f;
-}(Forth));
-
-Forth = (function ControlStructures(f) {
-    var _do = f.defjs("_do", function _do() {
-        f.returnStack.push(f.wordDefinitions[f.instructionPointer++]);
-        var top = f.stack.pop();
-        f.returnStack.push(f.stack.pop());
-        f.returnStack.push(top);
-    });
-    f.defjs("do", function do_() {
-        f.wordDefinitions.push(_do);
-        f.wordDefinitions.push(0); // Dummy endLoop
-        f.stack.push(f.wordDefinitions.length - 1);
-    }, true); // Immediate
-
-    function _plusLoop() {
-        var step = f.stack.pop();
-        var index = f.returnStack.pop();
-        var limit = f.returnStack.pop();
-        if (index < limit && index + step < limit || index >= limit && index + step >= limit) {
-            f.returnStack.push(limit);
-            f.returnStack.push(index + step);
-            f.instructionPointer += f.wordDefinitions[f.instructionPointer];
-        } else {
-            f.returnStack.pop();
-            f.instructionPointer++;
-        }
-    }
-
-    var plusLoop = f.defjs("+loop", function plusLoop() {
-        f.wordDefinitions.push(_plusLoop);
-        var doPosition = f.stack.pop();
-        f.wordDefinitions.push(doPosition - f.wordDefinitions.length + 1);
-        f.wordDefinitions[doPosition] = f.wordDefinitions.length;
-    }, true); // Immediate
-
-    f.defjs("loop", function loop() {
-        f.wordDefinitions.push(f._lit);
-        f.wordDefinitions.push(1);
-        plusLoop();
-    }, true); // Immediate
-
-    f.defjs("unloop", function unloop() {
-        f.returnStack.pop();
-        f.returnStack.pop();
-        f.returnStack.pop();
-    });
-
-    f.defjs("leave", function leave() {
-        f.returnStack.pop();
-        f.returnStack.pop();
-        f.instructionPointer = f.returnStack.pop();
-    });
-
-    f.defjs("i", function i() {
-        f.stack.push(f.returnStack.peek());
-    });
-
-    f.defjs("j", function j() {
-        f.stack.push(f.returnStack.peek(4));
-    });
-
-    f.defjs("recurse", function recurse() {
-        f.wordDefinitions.push(f.wordDefinitions[f._latest() + 1]);
-    }, true); // Immediate
-
-    return f;
-}(Forth));
+require("./comparison-operations.js")(Forth);
+require("./control-structures.js")(Forth);
+require("./stack-operations.js")(Forth);
 
 module.exports = Forth;

@@ -7,11 +7,11 @@ function Stack(name) {
         else
             throw "Stack empty: " + name;
     };
-    
+
     this.push = function(element) {
         data.push(element);
     };
-    
+
     this.peek = function(offset) {
         var index = data.length - (offset || 1);
         if (0 <= index && index < data.length)
@@ -19,11 +19,11 @@ function Stack(name) {
         else
             throw "Attempted to peek at invalid stack index " + index + ": " + name;
     };
-    
+
     this.length = function() {
         return data.length;
     };
-    
+
     this.clear = function() {
         data.length = 0;
     };

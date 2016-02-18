@@ -1,7 +1,8 @@
+var EndOfInput = (function() {})();
+
 function Input(input, startPosition, endPosition, toIn) {
     var inputBufferPosition = startPosition;
     var inputBufferLength = -1;
-    var EndOfInput = (function() {})();
     refill();
 
     function refill() {
@@ -97,3 +98,4 @@ function Input(input, startPosition, endPosition, toIn) {
 }
 
 module.exports = Input;
+module.EndOfInput = EndOfInput;

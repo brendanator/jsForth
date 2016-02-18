@@ -124,7 +124,113 @@ function Repl() {
 global.repl = Repl();
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{"./kernel/forth.js":2}],2:[function(require,module,exports){
+},{"./kernel/forth.js":4}],2:[function(require,module,exports){
+function ComparisonOperations(f) {
+    f.defjs("=", function equal() {
+        var first = f.stack.pop();
+        f.stack.push(f.stack.pop() == first);
+    });
+
+    f.defjs("<>", function notEqual() {
+        var first = f.stack.pop();
+        f.stack.push(f.stack.pop() != first);
+    });
+
+    f.defjs("<", function lessThan() {
+        var first = f.stack.pop();
+        f.stack.push(f.stack.pop() < first);
+    });
+
+    f.defjs(">", function greaterThan() {
+        var first = f.stack.pop();
+        f.stack.push(f.stack.pop() > first);
+    });
+
+    f.defjs("<=", function lessThanEqual() {
+        var first = f.stack.pop();
+        f.stack.push(f.stack.pop() <= first);
+    });
+
+    f.defjs(">=", function greaterThanEqual() {
+        var first = f.stack.pop();
+        f.stack.push(f.stack.pop() >= first);
+    });
+
+    return f;
+}
+
+module.exports = ComparisonOperations;
+},{}],3:[function(require,module,exports){
+function ControlStructures(f) {
+    function _do() {
+        f.returnStack.push(f.wordDefinitions[f.instructionPointer++]);
+        var top = f.stack.pop();
+        f.returnStack.push(f.stack.pop());
+        f.returnStack.push(top);
+    };
+
+    f.defjs("do", function compileDo() {
+        f.wordDefinitions.push(_do);
+        f.wordDefinitions.push(0); // Dummy endLoop
+        f.stack.push(f.wordDefinitions.length - 1);
+    }, true); // Immediate
+
+    function plusLoop() {
+        var step = f.stack.pop();
+        var index = f.returnStack.pop();
+        var limit = f.returnStack.pop();
+        if (index < limit && index + step < limit || index >= limit && index + step >= limit) {
+            f.returnStack.push(limit);
+            f.returnStack.push(index + step);
+            f.instructionPointer += f.wordDefinitions[f.instructionPointer];
+        } else {
+            f.returnStack.pop();
+            f.instructionPointer++;
+        }
+    }
+
+    var compilePlusLoop = f.defjs("+loop", function compilePlusLoop() {
+        f.wordDefinitions.push(plusLoop);
+        var doPosition = f.stack.pop();
+        f.wordDefinitions.push(doPosition - f.wordDefinitions.length + 1);
+        f.wordDefinitions[doPosition] = f.wordDefinitions.length;
+    }, true); // Immediate
+
+    f.defjs("loop", function loop() {
+        f.wordDefinitions.push(f._lit);
+        f.wordDefinitions.push(1);
+        compilePlusLoop();
+    }, true); // Immediate
+
+    f.defjs("unloop", function unloop() {
+        f.returnStack.pop();
+        f.returnStack.pop();
+        f.returnStack.pop();
+    });
+
+    f.defjs("leave", function leave() {
+        f.returnStack.pop();
+        f.returnStack.pop();
+        f.instructionPointer = f.returnStack.pop();
+    });
+
+    f.defjs("i", function i() {
+        f.stack.push(f.returnStack.peek());
+    });
+
+    f.defjs("j", function j() {
+        f.stack.push(f.returnStack.peek(4));
+    });
+
+    f.defjs("recurse", function recurse() {
+        f.wordDefinitions.push(f.wordDefinitions[f._latest() + 1]);
+    }, true); // Immediate
+
+    return f;
+}
+
+module.exports = ControlStructures;
+},{}],4:[function(require,module,exports){
 (function (global){
 var Stack = require("./stack.js");
 var Input = require("./input.js");
@@ -259,11 +365,6 @@ Forth = (function ForthInterals(f) {
     });
 
     var SOURCE = 1 << 31; // Address offset to indicate input addresses 
-    // var input = "";
-    // var inputEnd = 0;
-    // var inputBufferPosition = 0;
-    // var inputBufferLength = -1;
-    var EndOfInput = (function() {})();
 
     defjs("source", function source() {
         var positionLength = currentInput.source();
@@ -321,7 +422,7 @@ Forth = (function ForthInterals(f) {
             toIn(savedToIn);
         };
 
-        throw EndOfInput;
+        throw Input.EndOfInput;
     });
 
     var output = "";
@@ -818,7 +919,7 @@ Forth = (function ForthInterals(f) {
                 evaluateInstruction = f.wordDefinitions[f.instructionPointer++];
             }
         } catch (err) {
-            if (err == EndOfInput) {
+            if (err == Input.EndOfInput) {
                 currentInput = savedInput;
                 toIn(savedToIn);
                 f.instructionPointer = savedInstructionPointer;
@@ -845,7 +946,7 @@ Forth = (function ForthInterals(f) {
                 f.currentInstruction = f.wordDefinitions[f.instructionPointer++];
             }
         } catch (err) {
-            if (err !== EndOfInput) {
+            if (err !== Input.EndOfInput) {
                 console.log(output);
                 console.log("Exception " + err + " at:\n" + printStackTrace());
                 console.log(currentInput.inputBuffer());
@@ -873,42 +974,117 @@ Forth = (function ForthInterals(f) {
     return f;
 }(Forth));
 
-Forth = (function ComparisonOperations(f) {
-    f.defjs("=", function equal() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() == first);
-    });
+require("./comparison-operations.js")(Forth);
+require("./control-structures.js")(Forth);
+require("./stack-operations.js")(Forth);
 
-    f.defjs("<>", function notEqual() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() != first);
-    });
+module.exports = Forth;
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-    f.defjs("<", function lessThan() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() < first);
-    });
+},{"./comparison-operations.js":2,"./control-structures.js":3,"./input.js":5,"./stack-operations.js":6,"./stack.js":7}],5:[function(require,module,exports){
+var EndOfInput = (function() {})();
 
-    f.defjs(">", function greaterThan() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() > first);
-    });
+function Input(input, startPosition, endPosition, toIn) {
+    var inputBufferPosition = startPosition;
+    var inputBufferLength = -1;
+    refill();
 
-    f.defjs("<=", function lessThanEqual() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() <= first);
-    });
+    function refill() {
+        inputBufferPosition += inputBufferLength + 1;
 
-    f.defjs(">=", function greaterThanEqual() {
-        var first = f.stack.pop();
-        f.stack.push(f.stack.pop() >= first);
-    });
+        inputBufferLength = input.substring(inputBufferPosition).search(/\n/);
+        if (inputBufferLength == -1 || inputBufferPosition + inputBufferLength > endPosition) 
+          inputBufferLength = endPosition - inputBufferPosition;
 
-    return f;
-}(Forth));
+        toIn(0);
+        return inputBufferPosition < endPosition;
+    }
 
-Forth = (function StackOperations(f) {
+    function readKey() {
+        if (toIn() > inputBufferLength) {
+            if (!refill()) throw EndOfInput;
+        }
 
+        var keyPosition = inputBufferPosition + toIn();
+        toIn(toIn() + 1);
+        if (keyPosition < endPosition) {
+          return input.charAt(keyPosition);
+        } else {
+          return " ";
+        }
+    }
+
+    function parse(delimiter) {
+        if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
+        var address = inputBufferPosition + toIn();
+        var length = 0;
+        var result = "";
+        if (toIn() <= inputBufferLength) {
+            var key = readKey();
+            while (key !== delimiter) {
+                length++;
+                result += key;
+                key = readKey();
+            }
+        } else {
+            refill();
+        }
+        return [address, length, result];
+    }
+
+    function readWord(delimiter) {
+        if (toIn() >= inputBufferLength) {
+            refill();
+        }
+        delimiter = delimiter || /\s/;
+
+        var word = "";
+        var key = readKey();
+
+        // Skip leading delimiters
+        while (key.match(delimiter))
+            key = readKey();
+
+        while (!key.match(delimiter) && toIn() <= inputBufferLength) {
+            word += key;
+            key = readKey();
+        }
+
+        return word;
+    }
+
+    function source() {
+      return [inputBufferPosition, inputBufferLength];
+    }
+
+    function inputBuffer() {
+      return input.substring(inputBufferPosition, inputBufferPosition + inputBufferLength);
+    }
+
+    function subInput(position, length) {
+      return Input(input, position, position + length, toIn);
+    }
+
+    function charCodeAt(index) {
+      return input.charCodeAt(index);
+    }
+
+    return {
+      readWord: readWord,
+      readKey: readKey,
+      parse: parse,
+      refill: refill,
+      inputBuffer: inputBuffer,
+      source: source,
+      charCodeAt: charCodeAt,
+      subInput: subInput
+    };
+}
+
+module.exports = Input;
+module.EndOfInput = EndOfInput;
+},{}],6:[function(require,module,exports){
+function StackOperations(f) {
     f.defjs("drop", function drop() {
         f.stack.pop();
     });
@@ -1012,179 +1188,10 @@ Forth = (function StackOperations(f) {
     });
 
     return f;
-}(Forth));
-
-Forth = (function ControlStructures(f) {
-    var _do = f.defjs("_do", function _do() {
-        f.returnStack.push(f.wordDefinitions[f.instructionPointer++]);
-        var top = f.stack.pop();
-        f.returnStack.push(f.stack.pop());
-        f.returnStack.push(top);
-    });
-    f.defjs("do", function do_() {
-        f.wordDefinitions.push(_do);
-        f.wordDefinitions.push(0); // Dummy endLoop
-        f.stack.push(f.wordDefinitions.length - 1);
-    }, true); // Immediate
-
-    function _plusLoop() {
-        var step = f.stack.pop();
-        var index = f.returnStack.pop();
-        var limit = f.returnStack.pop();
-        if (index < limit && index + step < limit || index >= limit && index + step >= limit) {
-            f.returnStack.push(limit);
-            f.returnStack.push(index + step);
-            f.instructionPointer += f.wordDefinitions[f.instructionPointer];
-        } else {
-            f.returnStack.pop();
-            f.instructionPointer++;
-        }
-    }
-
-    var plusLoop = f.defjs("+loop", function plusLoop() {
-        f.wordDefinitions.push(_plusLoop);
-        var doPosition = f.stack.pop();
-        f.wordDefinitions.push(doPosition - f.wordDefinitions.length + 1);
-        f.wordDefinitions[doPosition] = f.wordDefinitions.length;
-    }, true); // Immediate
-
-    f.defjs("loop", function loop() {
-        f.wordDefinitions.push(f._lit);
-        f.wordDefinitions.push(1);
-        plusLoop();
-    }, true); // Immediate
-
-    f.defjs("unloop", function unloop() {
-        f.returnStack.pop();
-        f.returnStack.pop();
-        f.returnStack.pop();
-    });
-
-    f.defjs("leave", function leave() {
-        f.returnStack.pop();
-        f.returnStack.pop();
-        f.instructionPointer = f.returnStack.pop();
-    });
-
-    f.defjs("i", function i() {
-        f.stack.push(f.returnStack.peek());
-    });
-
-    f.defjs("j", function j() {
-        f.stack.push(f.returnStack.peek(4));
-    });
-
-    f.defjs("recurse", function recurse() {
-        f.wordDefinitions.push(f.wordDefinitions[f._latest() + 1]);
-    }, true); // Immediate
-
-    return f;
-}(Forth));
-
-module.exports = Forth;
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-
-},{"./input.js":3,"./stack.js":4}],3:[function(require,module,exports){
-function Input(input, startPosition, endPosition, toIn) {
-    var inputBufferPosition = startPosition;
-    var inputBufferLength = -1;
-    var EndOfInput = (function() {})();
-    refill();
-
-    function refill() {
-        inputBufferPosition += inputBufferLength + 1;
-
-        inputBufferLength = input.substring(inputBufferPosition).search(/\n/);
-        if (inputBufferLength == -1 || inputBufferPosition + inputBufferLength > endPosition) 
-          inputBufferLength = endPosition - inputBufferPosition;
-
-        toIn(0);
-        return inputBufferPosition < endPosition;
-    }
-
-    function readKey() {
-        if (toIn() > inputBufferLength) {
-            if (!refill()) throw EndOfInput;
-        }
-
-        var keyPosition = inputBufferPosition + toIn();
-        toIn(toIn() + 1);
-        if (keyPosition < endPosition) {
-          return input.charAt(keyPosition);
-        } else {
-          return " ";
-        }
-    }
-
-    function parse(delimiter) {
-        if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
-        var address = inputBufferPosition + toIn();
-        var length = 0;
-        var result = "";
-        if (toIn() <= inputBufferLength) {
-            var key = readKey();
-            while (key !== delimiter) {
-                length++;
-                result += key;
-                key = readKey();
-            }
-        } else {
-            refill();
-        }
-        return [address, length, result];
-    }
-
-    function readWord(delimiter) {
-        if (toIn() >= inputBufferLength) {
-            refill();
-        }
-        delimiter = delimiter || /\s/;
-
-        var word = "";
-        var key = readKey();
-
-        // Skip leading delimiters
-        while (key.match(delimiter))
-            key = readKey();
-
-        while (!key.match(delimiter) && toIn() <= inputBufferLength) {
-            word += key;
-            key = readKey();
-        }
-
-        return word;
-    }
-
-    function source() {
-      return [inputBufferPosition, inputBufferLength];
-    }
-
-    function inputBuffer() {
-      return input.substring(inputBufferPosition, inputBufferPosition + inputBufferLength);
-    }
-
-    function subInput(position, length) {
-      return Input(input, position, position + length, toIn);
-    }
-
-    function charCodeAt(index) {
-      return input.charCodeAt(index);
-    }
-
-    return {
-      readWord: readWord,
-      readKey: readKey,
-      parse: parse,
-      refill: refill,
-      inputBuffer: inputBuffer,
-      source: source,
-      charCodeAt: charCodeAt,
-      subInput: subInput
-    };
 }
 
-module.exports = Input;
-},{}],4:[function(require,module,exports){
+module.exports = StackOperations;
+},{}],7:[function(require,module,exports){
 function Stack(name) {
     var data = [];
 
@@ -1194,11 +1201,11 @@ function Stack(name) {
         else
             throw "Stack empty: " + name;
     };
-    
+
     this.push = function(element) {
         data.push(element);
     };
-    
+
     this.peek = function(offset) {
         var index = data.length - (offset || 1);
         if (0 <= index && index < data.length)
@@ -1206,11 +1213,11 @@ function Stack(name) {
         else
             throw "Attempted to peek at invalid stack index " + index + ": " + name;
     };
-    
+
     this.length = function() {
         return data.length;
     };
-    
+
     this.clear = function() {
         data.length = 0;
     };
