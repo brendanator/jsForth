@@ -1,0 +1,64 @@
+html {
+    font-size: 62.5%;
+}
+
+body {
+    font-size: 1.6rem;
+}
+
+* {
+  -webkit-box-sizing: border-box;
+     -moz-box-sizing: border-box;
+          box-sizing: border-box;
+  font-family: consolas;              
+}
+
+#main {
+  /*display: inline;*/
+  max-width: 800px;
+  margin: 0 auto; 
+  position: relative;
+}
+#repl {
+  position: absolute;
+  left: 0;
+  max-width: 600px;
+  height: 100vh;
+  max-height: 100vh;
+}
+.icon {
+  display: inline;
+  width: 100px;
+}
+.user-output {
+  display: inline;
+  border: none;
+  resize: none;
+  background-color: #ccffff;
+}
+.forth-output {
+  border: none;
+  resize: none;
+  background-color: #ccffcc;
+}
+.error {
+  /*display: block;*/
+  border: none;
+  resize: none;
+  color: red;
+  background-color: #ffeeee;
+}
+#output {
+  max-height: 70vh;
+  overflow-y: scroll;
+}
+#stack {
+  position: absolute;
+  left: 600px;
+  width: 200px;
+  max-height: 70vh;
+  overflow-y: scroll;
+}
+.stack-element {
+  display: block;
+}
