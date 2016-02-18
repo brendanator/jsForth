@@ -1,16 +1,6 @@
-var Stack = require("./stack.js");
 var Input = require("./input.js");
 
-var Forth = (function(f) {
-    f.instructionPointer = 0;
-    f.wordDefinitions = [];
-    f.returnStack = new Stack("Return Stack");
-    f.stack = new Stack("Stack");
-
-    return f;
-}({}));
-
-Forth = (function ForthInterals(f) {
+function ForthInterals(f) {
     var currentInput;
 
     f._latest = (function() {
@@ -180,9 +170,8 @@ Forth = (function ForthInterals(f) {
 
         f.currentInstruction = function acceptCallback() {
             var received = currentInput.inputBuffer();
-            var lengthReceived = Math.min(maxLength, received.length);
             f.stack.push(1);
-            setAddress(address, received.split("\n")[0]);
+            setAddress(address, received.substring(0, maxLength).split("\n")[0]);
 
             currentInput = savedInput;
             toIn(savedToIn);
@@ -350,7 +339,6 @@ Forth = (function ForthInterals(f) {
     function setAddress(address, value) {
         if (address < 0) {
             // TODO ?
-            console.log(input.substring(inputBufferPosition, inputBufferPosition+ 100));
             throw "Changing SOURCE";
         } else {
             f.wordDefinitions[address] = value;
@@ -697,12 +685,13 @@ Forth = (function ForthInterals(f) {
         }
     });
 
-    var inputString = ""
+    var inputString = "";
     function run(input) {
-        output = "";
-        startPosition = inputString.length;
+        var startPosition = inputString.length;
         inputString += input;
         currentInput = Input(inputString, startPosition, inputString.length, toIn);
+
+        output = "";
 
         try {
             // As js doesn't support tail call optimisation the
@@ -738,10 +727,27 @@ Forth = (function ForthInterals(f) {
     f.currentInstruction = quit;
     f._lit = _lit;
     return f;
-}(Forth));
+}
 
-require("./comparison-operations.js")(Forth);
-require("./control-structures.js")(Forth);
-require("./stack-operations.js")(Forth);
+var Stack = require("./stack.js");
+var ComparisonOperations = require("./comparison-operations.js");
+var ControlStructures = require("./control-structures.js");
+var StackOperations = require("./stack-operations.js");
+
+function Forth() {
+    var forth = {
+        instructionPointer: 0,
+        wordDefinitions: [],
+        returnStack: new Stack("Return Stack"),
+        stack: new Stack("Stack")
+    };
+
+    ForthInterals(forth);
+    ComparisonOperations(forth);
+    ControlStructures(forth);
+    StackOperations(forth);
+
+    return forth;
+}
 
 module.exports = Forth;

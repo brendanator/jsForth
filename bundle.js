@@ -1,9 +1,11 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 (function (global){
+var Forth = require("./kernel/forth.js");
+
 function Repl() {
     "use strict";
 
-    var forth = require("./kernel/forth.js");
+    var forth = Forth();
 
     function loadForth(file) {
         var xmlhttp = new XMLHttpRequest();
@@ -167,7 +169,7 @@ function ControlStructures(f) {
         var top = f.stack.pop();
         f.returnStack.push(f.stack.pop());
         f.returnStack.push(top);
-    };
+    }
 
     f.defjs("do", function compileDo() {
         f.wordDefinitions.push(_do);
@@ -232,19 +234,9 @@ function ControlStructures(f) {
 module.exports = ControlStructures;
 },{}],4:[function(require,module,exports){
 (function (global){
-var Stack = require("./stack.js");
 var Input = require("./input.js");
 
-var Forth = (function(f) {
-    f.instructionPointer = 0;
-    f.wordDefinitions = [];
-    f.returnStack = new Stack("Return Stack");
-    f.stack = new Stack("Stack");
-
-    return f;
-}({}));
-
-Forth = (function ForthInterals(f) {
+function ForthInterals(f) {
     var currentInput;
 
     f._latest = (function() {
@@ -414,9 +406,8 @@ Forth = (function ForthInterals(f) {
 
         f.currentInstruction = function acceptCallback() {
             var received = currentInput.inputBuffer();
-            var lengthReceived = Math.min(maxLength, received.length);
             f.stack.push(1);
-            setAddress(address, received.split("\n")[0]);
+            setAddress(address, received.substring(0, maxLength).split("\n")[0]);
 
             currentInput = savedInput;
             toIn(savedToIn);
@@ -584,7 +575,6 @@ Forth = (function ForthInterals(f) {
     function setAddress(address, value) {
         if (address < 0) {
             // TODO ?
-            console.log(input.substring(inputBufferPosition, inputBufferPosition+ 100));
             throw "Changing SOURCE";
         } else {
             f.wordDefinitions[address] = value;
@@ -931,12 +921,13 @@ Forth = (function ForthInterals(f) {
         }
     });
 
-    var inputString = ""
+    var inputString = "";
     function run(input) {
-        output = "";
-        startPosition = inputString.length;
+        var startPosition = inputString.length;
         inputString += input;
         currentInput = Input(inputString, startPosition, inputString.length, toIn);
+
+        output = "";
 
         try {
             // As js doesn't support tail call optimisation the
@@ -972,11 +963,28 @@ Forth = (function ForthInterals(f) {
     f.currentInstruction = quit;
     f._lit = _lit;
     return f;
-}(Forth));
+}
 
-require("./comparison-operations.js")(Forth);
-require("./control-structures.js")(Forth);
-require("./stack-operations.js")(Forth);
+var Stack = require("./stack.js");
+var ComparisonOperations = require("./comparison-operations.js");
+var ControlStructures = require("./control-structures.js");
+var StackOperations = require("./stack-operations.js");
+
+function Forth() {
+    var forth = {
+        instructionPointer: 0,
+        wordDefinitions: [],
+        returnStack: new Stack("Return Stack"),
+        stack: new Stack("Stack")
+    };
+
+    ForthInterals(forth);
+    ComparisonOperations(forth);
+    ControlStructures(forth);
+    StackOperations(forth);
+
+    return forth;
+}
 
 module.exports = Forth;
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})

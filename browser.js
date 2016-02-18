@@ -1,7 +1,9 @@
+var Forth = require("./kernel/forth.js");
+
 function Repl() {
     "use strict";
 
-    var forth = require("./kernel/forth.js");
+    var forth = Forth();
 
     function loadForth(file) {
         var xmlhttp = new XMLHttpRequest();

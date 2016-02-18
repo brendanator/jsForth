@@ -4,7 +4,7 @@ function ControlStructures(f) {
         var top = f.stack.pop();
         f.returnStack.push(f.stack.pop());
         f.returnStack.push(top);
-    };
+    }
 
     f.defjs("do", function compileDo() {
         f.wordDefinitions.push(_do);
