@@ -126,21 +126,20 @@ global.repl = Repl();
 
 },{"./kernel/forth.js":2}],2:[function(require,module,exports){
 (function (global){
-var Stack = require("./stack.js")
+var Stack = require("./stack.js");
+var Input = require("./input.js");
 
 var Forth = (function(f) {
-    var f = {};
-
     f.instructionPointer = 0;
     f.wordDefinitions = [];
     f.returnStack = new Stack("Return Stack");
     f.stack = new Stack("Stack");
 
     return f;
-}());
+}({}));
 
 Forth = (function ForthInterals(f) {
-    "use strict";
+    var currentInput;
 
     f._latest = (function() {
         var val = null;
@@ -260,82 +259,32 @@ Forth = (function ForthInterals(f) {
     });
 
     var SOURCE = 1 << 31; // Address offset to indicate input addresses 
-    var input = "";
-    var inputEnd = 0;
-    var inputBufferPosition = 0;
-    var inputBufferLength = -1;
+    // var input = "";
+    // var inputEnd = 0;
+    // var inputBufferPosition = 0;
+    // var inputBufferLength = -1;
     var EndOfInput = (function() {})();
 
     defjs("source", function source() {
-        f.stack.push(inputBufferPosition + SOURCE);
-        f.stack.push(inputBufferLength);
+        var positionLength = currentInput.source();
+        f.stack.push(SOURCE + positionLength[0]);
+        f.stack.push(positionLength[1]);
     });
 
-    function _refill() {
-        inputBufferPosition += inputBufferLength + 1;
-        inputBufferLength = input.substring(inputBufferPosition).search(/\n/);
-        toIn(0);
-        return inputBufferPosition < inputEnd;
-    }
     defjs("refill", function refill() {
-        f.stack.push(_refill());
+        f.stack.push(currentInput.refill());
     });
 
-    function readKey() {
-        if (toIn() > inputBufferLength) {
-            if (!_refill()) throw EndOfInput;
-        }
-
-        var keyPosition = inputBufferPosition + toIn();
-        toIn(toIn() + 1);
-
-        return input.charAt(keyPosition);
-    }
     defjs("key", function key() {
-        f.stack.push(readKey().charCodeAt(0));
+        f.stack.push(currentInput.readKey().charCodeAt(0));
     });
 
-    function _parse(delimiter) {
-        if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
-        var address = SOURCE + inputBufferPosition + toIn();
-        var length = 0;
-        if (toIn() <= inputBufferLength) {
-            var key = readKey();
-            while (key !== delimiter) {
-                length++;
-                key = readKey();
-            }
-        } else {
-            _refill();
-        }
-        return [address, length];
-    }
     defjs("parse", function parse() {
-        var addressLength = _parse(f.stack.pop());
-        f.stack.push(addressLength[0]);
+        var addressLength = currentInput.parse(f.stack.pop());
+        f.stack.push(SOURCE + addressLength[0]);
         f.stack.push(addressLength[1]);
     });
 
-    function readWord(delimiter) {
-        if (toIn() == inputBufferLength) {
-            _refill();
-        }
-        delimiter = delimiter || /\s/;
-
-        var word = "";
-        var key = readKey();
-
-        // Skip leading delimiters
-        while (key.match(delimiter))
-            key = readKey();
-
-        while (!key.match(delimiter) && toIn() <= inputBufferLength) {
-            word += key;
-            key = readKey();
-        }
-
-        return word;
-    }
     var wordBufferStart = f.wordDefinitions.length;
     f.wordDefinitions.length += 32;
     defjs("word", function word() {
@@ -343,7 +292,7 @@ Forth = (function ForthInterals(f) {
         if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
         f.stack.push(wordBufferStart);
 
-        var word = readWord(delimiter);
+        var word = currentInput.readWord(delimiter);
         var length = Math.min(word.length, 31);
         f.wordDefinitions[wordBufferStart] = length;
         for (var i = 0; i < length; i++) {
@@ -352,27 +301,24 @@ Forth = (function ForthInterals(f) {
     });
 
     defjs("char", function char() {
-        f.stack.push(readWord().charCodeAt(0));
+        f.stack.push(currentInput.readWord().charCodeAt(0));
     });
 
     defjs("accept", function accept() {
-        var currentInputEnd = inputEnd;
-        var currentInputBufferPosition = inputBufferPosition;
-        var currentInputBufferLength = inputBufferLength;
-        var currentToIn = toIn();
+        var savedInput = currentInput;
+        var savedToIn = toIn();
 
         var maxLength = f.stack.pop();
         var address = f.stack.pop();
 
         f.currentInstruction = function acceptCallback() {
-            var lengthReceived = Math.min(maxLength, inputBufferLength);
+            var received = currentInput.inputBuffer();
+            var lengthReceived = Math.min(maxLength, received.length);
             f.stack.push(1);
-            setAddress(address, input.substring(inputBufferPosition, inputBufferPosition + lengthReceived).split("\n")[0]);
+            setAddress(address, received.split("\n")[0]);
 
-            inputEnd = currentInputEnd;
-            inputBufferPosition = currentInputBufferPosition;
-            inputBufferLength = currentInputBufferLength;
-            toIn(currentToIn);
+            currentInput = savedInput;
+            toIn(savedToIn);
         };
 
         throw EndOfInput;
@@ -462,7 +408,7 @@ Forth = (function ForthInterals(f) {
     }
 
     function interpretWord() {
-        var word = readWord();
+        var word = currentInput.readWord();
         var definition = findDefinition(word);
         if (definition) {
             if (!compiling() || definition.immediate) {
@@ -489,7 +435,7 @@ Forth = (function ForthInterals(f) {
     });
 
     defjs("create", function create() {
-        defheader(readWord());
+        defheader(currentInput.readWord());
         var dataFieldAddress = f.wordDefinitions.length + 1;
         f.wordDefinitions.push(function pushDataFieldAddress() {
             f.stack.push(dataFieldAddress);
@@ -528,7 +474,7 @@ Forth = (function ForthInterals(f) {
 
     function getAddress(address) {
         if (address < 0) {
-            return input.charCodeAt(address - SOURCE);
+            return currentInput.charCodeAt(address - SOURCE);
         } else {
             return f.wordDefinitions[address];
         }
@@ -568,12 +514,12 @@ Forth = (function ForthInterals(f) {
     });
 
     defjs("'", function tick() {
-        f.stack.push(findDefinition(readWord()).executionToken);
+        f.stack.push(findDefinition(currentInput.readWord()).executionToken);
     });
 
     defjs("[']", function bracketTick() {
         f.wordDefinitions.push(_lit);
-        f.wordDefinitions.push(findDefinition(readWord()).executionToken);
+        f.wordDefinitions.push(findDefinition(currentInput.readWord()).executionToken);
     }, true);
 
     defjs("jump", function jump() {
@@ -763,10 +709,10 @@ Forth = (function ForthInterals(f) {
     defjs("js", function js() {
         if (compiling()) {
             f.wordDefinitions.push(_lit);
-            f.wordDefinitions.push(readWord());
+            f.wordDefinitions.push(currentInput.readWord());
             f.wordDefinitions.push(JS);
         } else {
-            jsInterop(readWord());
+            jsInterop(currentInput.readWord());
         }
     }, true);
 
@@ -775,7 +721,7 @@ Forth = (function ForthInterals(f) {
     });
 
     defjs(":", function colon() {
-        var name = readWord();
+        var name = currentInput.readWord();
         defheader(name, false, true);
         compileEnter(name);
         compiling(true);
@@ -845,8 +791,7 @@ Forth = (function ForthInterals(f) {
     defjs("abort", abort);
 
     defjs('abort"', function abortQuote() {
-        var addressLength = _parse('"');
-        var error = input.substring(addressLength[0], addressLength[0] + addressLength[1] + 1);
+        var error = currentInput.parse('"')[2];
         f.wordDefinitions.push(function abortQuote() {
             if (f.stack.pop())
                 abort(error);
@@ -854,16 +799,14 @@ Forth = (function ForthInterals(f) {
     }, true); // Immediate
 
     defjs("evaluate", function evaluate() {
-        var currentInputEnd = inputEnd;
-        var currentInputBufferPosition = inputBufferPosition;
-        var currentInputBufferLength = inputBufferLength;
-        var currentToIn = toIn();
-        var currentInstructionPointer = f.instructionPointer;
+        var savedInput = currentInput;
+        var savedToIn = toIn();
 
-        inputBufferLength = f.stack.pop();
-        inputBufferPosition = f.stack.pop() - SOURCE;
-        inputEnd = inputBufferPosition + inputBufferLength;
-        toIn(0);
+        var length = f.stack.pop();
+        var position = f.stack.pop() - SOURCE;
+        currentInput = currentInput.subInput(position, length);
+
+        var savedInstructionPointer = f.instructionPointer;
 
         var evaluateInstruction = interpret;
 
@@ -876,11 +819,9 @@ Forth = (function ForthInterals(f) {
             }
         } catch (err) {
             if (err == EndOfInput) {
-                inputEnd = currentInputEnd;
-                inputBufferPosition = currentInputBufferPosition;
-                inputBufferLength = currentInputBufferLength;
-                toIn(currentToIn);
-                f.instructionPointer = currentInstructionPointer;
+                currentInput = savedInput;
+                toIn(savedToIn);
+                f.instructionPointer = savedInstructionPointer;
                 // Pop interpret from returnStack
                 f.returnStack.pop();
             } else {
@@ -889,13 +830,12 @@ Forth = (function ForthInterals(f) {
         }
     });
 
-    function run(inp) {
+    var inputString = ""
+    function run(input) {
         output = "";
-        inputBufferPosition = input.length - 1;
-        inputBufferLength = 0;
-        input += inp + "\n";
-        inputEnd = input.length - 1;
-        _refill();
+        startPosition = inputString.length;
+        inputString += input;
+        currentInput = Input(inputString, startPosition, inputString.length, toIn);
 
         try {
             // As js doesn't support tail call optimisation the
@@ -908,7 +848,7 @@ Forth = (function ForthInterals(f) {
             if (err !== EndOfInput) {
                 console.log(output);
                 console.log("Exception " + err + " at:\n" + printStackTrace());
-                console.log(input.substring(inputBufferPosition, inputBufferPosition + inputBufferLength));
+                console.log(currentInput.inputBuffer());
                 f.currentInstruction = quit;
                 f.stack.clear();
                 throw err;
@@ -931,10 +871,9 @@ Forth = (function ForthInterals(f) {
     f.currentInstruction = quit;
     f._lit = _lit;
     return f;
-}(Forth))
+}(Forth));
 
 Forth = (function ComparisonOperations(f) {
-
     f.defjs("=", function equal() {
         var first = f.stack.pop();
         f.stack.push(f.stack.pop() == first);
@@ -1145,7 +1084,107 @@ Forth = (function ControlStructures(f) {
 module.exports = Forth;
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{"./stack.js":3}],3:[function(require,module,exports){
+},{"./input.js":3,"./stack.js":4}],3:[function(require,module,exports){
+function Input(input, startPosition, endPosition, toIn) {
+    var inputBufferPosition = startPosition;
+    var inputBufferLength = -1;
+    var EndOfInput = (function() {})();
+    refill();
+
+    function refill() {
+        inputBufferPosition += inputBufferLength + 1;
+
+        inputBufferLength = input.substring(inputBufferPosition).search(/\n/);
+        if (inputBufferLength == -1 || inputBufferPosition + inputBufferLength > endPosition) 
+          inputBufferLength = endPosition - inputBufferPosition;
+
+        toIn(0);
+        return inputBufferPosition < endPosition;
+    }
+
+    function readKey() {
+        if (toIn() > inputBufferLength) {
+            if (!refill()) throw EndOfInput;
+        }
+
+        var keyPosition = inputBufferPosition + toIn();
+        toIn(toIn() + 1);
+        if (keyPosition < endPosition) {
+          return input.charAt(keyPosition);
+        } else {
+          return " ";
+        }
+    }
+
+    function parse(delimiter) {
+        if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
+        var address = inputBufferPosition + toIn();
+        var length = 0;
+        var result = "";
+        if (toIn() <= inputBufferLength) {
+            var key = readKey();
+            while (key !== delimiter) {
+                length++;
+                result += key;
+                key = readKey();
+            }
+        } else {
+            refill();
+        }
+        return [address, length, result];
+    }
+
+    function readWord(delimiter) {
+        if (toIn() >= inputBufferLength) {
+            refill();
+        }
+        delimiter = delimiter || /\s/;
+
+        var word = "";
+        var key = readKey();
+
+        // Skip leading delimiters
+        while (key.match(delimiter))
+            key = readKey();
+
+        while (!key.match(delimiter) && toIn() <= inputBufferLength) {
+            word += key;
+            key = readKey();
+        }
+
+        return word;
+    }
+
+    function source() {
+      return [inputBufferPosition, inputBufferLength];
+    }
+
+    function inputBuffer() {
+      return input.substring(inputBufferPosition, inputBufferPosition + inputBufferLength);
+    }
+
+    function subInput(position, length) {
+      return Input(input, position, position + length, toIn);
+    }
+
+    function charCodeAt(index) {
+      return input.charCodeAt(index);
+    }
+
+    return {
+      readWord: readWord,
+      readKey: readKey,
+      parse: parse,
+      refill: refill,
+      inputBuffer: inputBuffer,
+      source: source,
+      charCodeAt: charCodeAt,
+      subInput: subInput
+    };
+}
+
+module.exports = Input;
+},{}],4:[function(require,module,exports){
 function Stack(name) {
     var data = [];
 
@@ -1154,11 +1193,11 @@ function Stack(name) {
             return data.pop();
         else
             throw "Stack empty: " + name;
-    }
+    };
     
     this.push = function(element) {
         data.push(element);
-    }
+    };
     
     this.peek = function(offset) {
         var index = data.length - (offset || 1);
@@ -1166,15 +1205,15 @@ function Stack(name) {
             return data[index];
         else
             throw "Attempted to peek at invalid stack index " + index + ": " + name;
-    }
+    };
     
     this.length = function() {
         return data.length;
-    }
+    };
     
     this.clear = function() {
         data.length = 0;
-    }
+    };
 }
 
 module.exports = Stack;
