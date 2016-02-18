@@ -1,4 +1,19 @@
 function ControlStructures(f) {
+    // if, else, then
+    f.defjs("jump", function jump() {
+        f.instructionPointer += f.wordDefinitions[f.instructionPointer];
+    });
+
+    f.defjs("jumpIfFalse", function jumpIfFalse() {
+        if (!f.stack.pop()) {
+            f.instructionPointer += f.wordDefinitions[f.instructionPointer];
+        } else {
+            f.instructionPointer++; // Skip the offset
+        }
+    });
+
+
+    // do, loop, +loop, unloop, leave, i, j
     function _do() {
         f.returnStack.push(f.wordDefinitions[f.instructionPointer++]);
         var top = f.stack.pop();
@@ -59,8 +74,29 @@ function ControlStructures(f) {
         f.stack.push(f.returnStack.peek(4));
     });
 
+
+    // recurse
     f.defjs("recurse", function recurse() {
         f.wordDefinitions.push(f.wordDefinitions[f._latest() + 1]);
+    }, true); // Immediate
+
+
+    // does
+    function _does() {
+        var wordPosition = f._latest();
+        var doDoesPosition = f.instructionPointer;
+
+        f.wordDefinitions[wordPosition + 1] = function doDoes() {
+            f.stack.push(wordPosition + 2);
+            f.returnStack.push(f.instructionPointer);
+            f.instructionPointer = doDoesPosition;
+        };
+
+        f.instructionPointer = f.returnStack.pop();
+    }
+
+    f.defjs("does>", function compileDoes() {
+        f.wordDefinitions.push(_does);
     }, true); // Immediate
 
     return f;
