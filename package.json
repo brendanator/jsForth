@@ -1,33 +1,34 @@
 {
-    "name": "jsForth",
-    "author": "brendanator",
-    "main": "kernel/forth.js",
-    "homepage": "https://github.com/brendanator/jsForth",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/brendanator/jsForth.git"
-    },
-    "keywords": [
-        "forth"
-    ],
-    "license": "MIT",
-    "bugs": {
-        "url": "https://github.com/brendanator/jsForth/issues"
-    },
-    "scripts": {
-        "build": "browserify browser/main.js > bundle.js",
-        "build:watch": "watchify browser/main.js -o 'exorcist bundle.js.map > bundle.js' -dv",
-        "test": "test/run-ans-forth-tests.js",
-        "test:watch": "watch 'npm run test' .",
-        "start": "python -m SimpleHTTPServer"
-    },
-    "dependencies": {
-        "long": "^3.0.3"
-    },
-    "devDependencies": {
-        "browserify": "latest",
-        "watchify": "latest",
-        "exorcist": "latest",
-        "watch": "latest"
-    }
+  "name": "jsForth",
+  "version": "0.1.0",
+  "author": "brendanator",
+  "main": "kernel/forth.js",
+  "homepage": "https://github.com/brendanator/jsForth",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brendanator/jsForth.git"
+  },
+  "keywords": [
+    "forth"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/brendanator/jsForth/issues"
+  },
+  "scripts": {
+    "build": "browserify browser/main.js > bundle.js",
+    "build:watch": "watchify browser/main.js -o 'exorcist bundle.js.map > bundle.js' -dv",
+    "test": "test/run-ans-forth-tests.js",
+    "test:watch": "watch 'npm run test' .",
+    "start": "python -m SimpleHTTPServer"
+  },
+  "dependencies": {
+    "long": "^3.0.3"
+  },
+  "devDependencies": {
+    "browserify": "latest",
+    "watchify": "latest",
+    "exorcist": "latest",
+    "watch": "latest"
+  }
 }
