@@ -19,7 +19,7 @@ function Repl() {
         xmlhttp.send();
     }
     loadForth("forth/forth.fth");
-    // loadForth("forth/ans-forth-tests.fth");
+    loadForth("forth/ans-forth-tests.fth");
 
     var inputHistory = [""];
     var historyCount = 0;
@@ -126,7 +126,7 @@ function Repl() {
 global.repl = Repl();
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{"./kernel/forth.js":5}],2:[function(require,module,exports){
+},{"./kernel/forth.js":6}],2:[function(require,module,exports){
 function ComparisonOperations(f) {
     f.defjs("true", function _true() {
         f.stack.push(true);
@@ -193,12 +193,12 @@ module.exports = ComparisonOperations;
 function ControlStructures(f) {
     // if, else, then
     f.defjs("jump", function jump() {
-        f.instructionPointer += f.wordDefinitions[f.instructionPointer];
+        f.instructionPointer += f.dataSpace[f.instructionPointer];
     });
 
     f.defjs("jumpIfFalse", function jumpIfFalse() {
         if (!f.stack.pop()) {
-            f.instructionPointer += f.wordDefinitions[f.instructionPointer];
+            f.instructionPointer += f.dataSpace[f.instructionPointer];
         } else {
             f.instructionPointer++; // Skip the offset
         }
@@ -207,16 +207,16 @@ function ControlStructures(f) {
 
     // do, loop, +loop, unloop, leave, i, j
     function _do() {
-        f.returnStack.push(f.wordDefinitions[f.instructionPointer++]);
+        f.returnStack.push(f.dataSpace[f.instructionPointer++]);
         var top = f.stack.pop();
         f.returnStack.push(f.stack.pop());
         f.returnStack.push(top);
     }
 
     f.defjs("do", function compileDo() {
-        f.wordDefinitions.push(_do);
-        f.wordDefinitions.push(0); // Dummy endLoop
-        f.stack.push(f.wordDefinitions.length - 1);
+        f.dataSpace.push(_do);
+        f.dataSpace.push(0); // Dummy endLoop
+        f.stack.push(f.dataSpace.length - 1);
     }, true); // Immediate
 
     function plusLoop() {
@@ -226,7 +226,7 @@ function ControlStructures(f) {
         if (index < limit && index + step < limit || index >= limit && index + step >= limit) {
             f.returnStack.push(limit);
             f.returnStack.push(index + step);
-            f.instructionPointer += f.wordDefinitions[f.instructionPointer];
+            f.instructionPointer += f.dataSpace[f.instructionPointer];
         } else {
             f.returnStack.pop();
             f.instructionPointer++;
@@ -234,15 +234,15 @@ function ControlStructures(f) {
     }
 
     var compilePlusLoop = f.defjs("+loop", function compilePlusLoop() {
-        f.wordDefinitions.push(plusLoop);
+        f.dataSpace.push(plusLoop);
         var doPosition = f.stack.pop();
-        f.wordDefinitions.push(doPosition - f.wordDefinitions.length + 1);
-        f.wordDefinitions[doPosition] = f.wordDefinitions.length;
+        f.dataSpace.push(doPosition - f.dataSpace.length + 1);
+        f.dataSpace[doPosition] = f.dataSpace.length;
     }, true); // Immediate
 
     f.defjs("loop", function loop() {
-        f.wordDefinitions.push(f._lit);
-        f.wordDefinitions.push(1);
+        f.dataSpace.push(f._lit);
+        f.dataSpace.push(1);
         compilePlusLoop();
     }, true); // Immediate
 
@@ -269,7 +269,7 @@ function ControlStructures(f) {
 
     // recurse
     f.defjs("recurse", function recurse() {
-        f.wordDefinitions.push(f.wordDefinitions[f._latest() + 1]);
+        f.dataSpace.push(f.dataSpace[f._latest() + 1]);
     }, true); // Immediate
 
 
@@ -278,7 +278,7 @@ function ControlStructures(f) {
         var wordPosition = f._latest();
         var doDoesPosition = f.instructionPointer;
 
-        f.wordDefinitions[wordPosition + 1] = function doDoes() {
+        f.dataSpace[wordPosition + 1] = function doDoes() {
             f.stack.push(wordPosition + 2);
             f.returnStack.push(f.instructionPointer);
             f.instructionPointer = doDoesPosition;
@@ -288,7 +288,7 @@ function ControlStructures(f) {
     }
 
     f.defjs("does>", function compileDoes() {
-        f.wordDefinitions.push(_does);
+        f.dataSpace.push(_does);
     }, true); // Immediate
 
     return f;
@@ -296,6 +296,19 @@ function ControlStructures(f) {
 
 module.exports = ControlStructures;
 },{}],4:[function(require,module,exports){
+var Stack = require("./stack.js");
+
+function Data(f) {
+    f.instructionPointer = 0;
+    f.dataSpace = [];
+    f.returnStack = new Stack("Return Stack");
+    f.stack = new Stack("Stack");
+
+    return f;
+}
+
+module.exports = Data;
+},{"./stack.js":14}],5:[function(require,module,exports){
 function Header(link, name, immediate, hidden, executionToken) {
     this.link = link;
     this.name = name;
@@ -312,37 +325,37 @@ function Definitions(f) {
     };
 
     function defheader(name, immediate, hidden) {
-        f.wordDefinitions.push(new Header(latest(), name, immediate, hidden, f.wordDefinitions.length + 1));
-        latest(f.wordDefinitions.length - 1);
+        f.dataSpace.push(new Header(latest(), name, immediate, hidden, f.dataSpace.length + 1));
+        latest(f.dataSpace.length - 1);
     };
 
     f.defjs = function defjs(name, fn, immediate, displayName) {
         defheader(displayName || name, immediate);
-        f.wordDefinitions.push(fn);
+        f.dataSpace.push(fn);
         return fn;
     };
 
     f.defvar = function defvar(name, initial) {
         defheader(name);
-        var varAddress = f.wordDefinitions.length + 1;
-        f.wordDefinitions.push(function variable() {
+        var varAddress = f.dataSpace.length + 1;
+        f.dataSpace.push(function variable() {
             f.stack.push(varAddress);
         });
-        f.wordDefinitions.push(initial);
+        f.dataSpace.push(initial);
 
         return function(value) {
             if (value !== undefined)
-                f.wordDefinitions[varAddress] = value;
+                f.dataSpace[varAddress] = value;
             else
-                return f.wordDefinitions[varAddress];
+                return f.dataSpace[varAddress];
         };
     };
 
-    latest = f.defvar("latest", f.wordDefinitions.length); // Replace existing function definition
+    latest = f.defvar("latest", f.dataSpace.length); // Replace existing function definition
     f.compiling = f.defvar("state", 0);
 
     f.compileEnter = function compileEnter(name) {
-        var instruction = f.wordDefinitions.length + 1;
+        var instruction = f.dataSpace.length + 1;
 
         var enter;
         try {
@@ -360,14 +373,14 @@ function Definitions(f) {
             };
         }
 
-        f.wordDefinitions.push(enter);
+        f.dataSpace.push(enter);
         return enter;
     };
 
     f.findDefinition = function findDefinition(word) {
         var current = latest();
         while (current !== null) {
-            var wordDefinition = f.wordDefinitions[current];
+            var wordDefinition = f.dataSpace[current];
             // Case insensitive
             if (wordDefinition.name.toLowerCase() == word.toLowerCase() && !wordDefinition.hidden)
                 return wordDefinition;
@@ -377,7 +390,7 @@ function Definitions(f) {
     };
 
     f.defjs(":", function colon() {
-        var name = f.readWord();
+        var name = f._readWord();
         defheader(name, false, true);
         f.compileEnter(name);
         f.compiling(true);
@@ -385,7 +398,7 @@ function Definitions(f) {
 
     f.defjs(":noname", function noname() {
         defheader("", false, true);
-        f.stack.push(f.wordDefinitions.length);
+        f.stack.push(f.dataSpace.length);
         f.compileEnter("_noname_");
         f.compiling(true);
     });
@@ -395,8 +408,8 @@ function Definitions(f) {
     });
 
     f.defjs(";", function semicolon() {
-        f.wordDefinitions.push(exit);
-        f.wordDefinitions[latest()].hidden = false;
+        f.dataSpace.push(exit);
+        f.dataSpace[latest()].hidden = false;
         f.compiling(false);
     }, true); // Immediate
 
@@ -426,23 +439,23 @@ function Definitions(f) {
     });
 
     f.defjs("create", function create() {
-        defheader(f.readWord());
-        var dataFieldAddress = f.wordDefinitions.length + 1;
-        f.wordDefinitions.push(function pushDataFieldAddress() {
+        defheader(f._readWord());
+        var dataFieldAddress = f.dataSpace.length + 1;
+        f.dataSpace.push(function pushDataFieldAddress() {
             f.stack.push(dataFieldAddress);
         });
     });
 
     f.defjs("allot", function allot() {
-        f.wordDefinitions.length += f.stack.pop();
+        f.dataSpace.length += f.stack.pop();
     });
 
     f.defjs(",", function comma() {
-        f.wordDefinitions.push(f.stack.pop());
+        f.dataSpace.push(f.stack.pop());
     });
 
     f.defjs("compile,", function compileComma() {
-        f.wordDefinitions.push(f.wordDefinitions[f.stack.pop()]);
+        f.dataSpace.push(f.dataSpace[f.stack.pop()]);
     });
 
     f.defjs("[", function lbrac() {
@@ -454,323 +467,37 @@ function Definitions(f) {
     });
 
     f.defjs("immediate", function immediate() {
-        var wordDefinition = f.wordDefinitions[latest()];
+        var wordDefinition = f.dataSpace[latest()];
         wordDefinition.immediate = !wordDefinition.immediate;
     }, true); // Immediate
 
     f.defjs("hidden", function hidden() {
-        var wordDefinition = f.wordDefinitions[f.stack.pop()];
+        var wordDefinition = f.dataSpace[f.stack.pop()];
         wordDefinition.hidden = !wordDefinition.hidden;
     });
 
     f.defjs("'", function tick() {
-        f.stack.push(f.findDefinition(f.readWord()).executionToken);
+        f.stack.push(f.findDefinition(f._readWord()).executionToken);
+    });
+
+    var _lit = f.defjs("lit", function lit() {
+        f.stack.push(f.dataSpace[f.instructionPointer]);
+        f.instructionPointer++;
     });
 
     f.defjs("[']", function bracketTick() {
-        f.wordDefinitions.push(f._lit);
-        f.wordDefinitions.push(f.findDefinition(f.readWord()).executionToken);
+        f.dataSpace.push(f._lit);
+        f.dataSpace.push(f.findDefinition(f._readWord()).executionToken);
     }, true);
 
     f._latest = latest
+    f._lit = _lit;
     return f;
 }
 
 module.exports = Definitions;
-},{}],5:[function(require,module,exports){
-var Input = require("./input.js");
-
-function ForthInterpreter(f) {
-    var base = f.defvar("base", 10);
-    var toIn = f.defvar(">in", 0);
-
-    var _lit = f.defjs("lit", function lit() {
-        f.stack.push(f.wordDefinitions[f.instructionPointer]);
-        f.instructionPointer++;
-    });
-
-    var INPUT_SOURCE = 1 << 31; // Address offset to indicate input addresses 
-
-    f.defjs("source", function source() {
-        var positionLength = f._currentInput.source();
-        f.stack.push(INPUT_SOURCE + positionLength[0]);
-        f.stack.push(positionLength[1]);
-    });
-
-    f.defjs("refill", function refill() {
-        f.stack.push(f._currentInput.refill());
-    });
-
-    f.defjs("key", function key() {
-        f.stack.push(f._currentInput.readKey().charCodeAt(0));
-    });
-
-    f.defjs("parse", function parse() {
-        var addressLength = f._currentInput.parse(f.stack.pop());
-        f.stack.push(INPUT_SOURCE + addressLength[0]);
-        f.stack.push(addressLength[1]);
-    });
-
-    f.readWord = function readWord() {
-        return f._currentInput.readWord();
-    };
-
-    var wordBufferStart = f.wordDefinitions.length;
-    f.wordDefinitions.length += 32;
-    f.defjs("word", function word() {
-        var delimiter = f.stack.pop();
-        if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
-        f.stack.push(wordBufferStart);
-
-        var word = f.readWord(delimiter);
-        var length = Math.min(word.length, 31);
-        f.wordDefinitions[wordBufferStart] = length;
-        for (var i = 0; i < length; i++) {
-            f.wordDefinitions[wordBufferStart + i + 1] = word.charCodeAt(i);
-        }
-    });
-
-    f.defjs("char", function char() {
-        f.stack.push(f.readWord().charCodeAt(0));
-    });
-
-    f.defjs("accept", function accept() {
-        var savedInput = f._currentInput;
-        var savedToIn = toIn();
-
-        var maxLength = f.stack.pop();
-        var address = f.stack.pop();
-
-        f.currentInstruction = function acceptCallback() {
-            var received = f._currentInput.inputBuffer().substring(0, maxLength).split("\n")[0];
-
-            f.stack.push(received.length);
-            for (var i = 0; i < received.length; i++) {
-                f._setAddress(address + i, received[i]);
-            }
-
-            f._currentInput = savedInput;
-            toIn(savedToIn);
-        };
-
-        throw Input.EndOfInput;
-    });
-
-    var output = "";
-
-    f.defjs("cr", function cr() {
-        output += "\n";
-    });
-
-    f.defjs(".", function dot() {
-        var value;
-        var top = f.stack.pop();
-
-        if (typeof top === "undefined")
-            value = "undefined";
-        else if (top === null)
-            value = "null";
-        else
-            value = top.toString(base()); // Output numbers in current base
-
-        output += value + " ";
-    });
-
-    f.defjs("emit", function emit() {
-        var value = f.stack.pop();
-        if (typeof value === "number")
-            output += String.fromCharCode(value);
-        else
-            output += value;
-    });
-
-    f.defjs("type", function type() {
-        var length = f.stack.pop();
-        var address = f.stack.pop();
-        for (var i = 0; i < length; i++) {
-            var value = f._getAddress(address + i);
-            if (typeof value === "number") {
-                output += String.fromCharCode(value);
-            } else
-                output += value;
-        }
-    });
-
-    function _parseInt(string, base) {
-        var int = 0;
-        if (string[0] !== "-") { // Positive
-            for (var i = 0; i < string.length; i++) {
-                int *= base;
-                int += parseInt(string[i], base);
-            }
-            return int;
-        } else {
-            for (var j = 1; j < string.length; j++) {
-                int *= base;
-                int -= parseInt(string[j], base);
-            }
-            return int;
-        }
-    }
-
-    // Parse a float in the provide base
-    function parseFloat(string, base) {
-        //split the string at the decimal point
-        string = string.split(/\./);
-
-        //if there is nothing before the decimal point, make it 0
-        if (string[0] === '') {
-            string[0] = "0";
-        }
-
-        //if there was a decimal point & something after it
-        if (string.length > 1 && string[1] !== '') {
-            var fractionLength = string[1].length;
-            string[1] = _parseInt(string[1], base);
-            string[1] *= Math.pow(base, -fractionLength);
-            var int = _parseInt(string[0], base);
-            if (int >= 0)
-                return int + string[1];
-            else
-                return int - string[1];
-        }
-
-        //if there wasn't a decimal point or there was but nothing was after it
-        return _parseInt(string[0], base);
-    }
-
-    function interpretWord() {
-        var word = f.readWord();
-        var definition = f.findDefinition(word);
-        if (definition) {
-            if (!f.compiling() || definition.immediate) {
-                f.wordDefinitions[definition.executionToken]();
-                return;
-            } else {
-                f.wordDefinitions.push(f.wordDefinitions[definition.executionToken]);
-            }
-        } else {
-            var num = parseFloat(word, base());
-            if (isNaN(num)) throw "Word not defined: " + word;
-            if (f.compiling()) {
-                f.wordDefinitions.push(_lit);
-                f.wordDefinitions.push(num);
-            } else {
-                f.stack.push(num);
-            }
-        }
-    }
-
-    f.defjs("execute", function execute() {
-        f.wordDefinitions[f.stack.pop()]();
-    });
-
-
-    var interpretInstruction = f.wordDefinitions.length + 1;
-    var interpret = f.defjs("interpret", function interpret() {
-        f.instructionPointer = interpretInstruction; // Loop after interpret word is called
-        interpretWord();
-    });
-
-    var quit = f.defjs("quit", function quit() {
-        f.compiling(false); // Enter interpretation state
-        f.returnStack.clear(); // Clear return stack
-        f.instructionPointer = interpretInstruction; // Run the interpreter
-    });
-
-    function abort(error) {
-        f.stack.clear();
-        throw error || "";
-    }
-    f.defjs("abort", abort);
-
-    f.defjs('abort"', function abortQuote() {
-        var error = f._currentInput.parse('"')[2];
-        f.wordDefinitions.push(function abortQuote() {
-            if (f.stack.pop())
-                abort(error);
-        });
-    }, true); // Immediate
-
-    f.defjs("evaluate", function evaluate() {
-        var savedInput = f._currentInput;
-        var savedToIn = toIn();
-
-        var length = f.stack.pop();
-        var position = f.stack.pop() - INPUT_SOURCE;
-        f._currentInput = f._currentInput.subInput(position, length);
-
-        var savedInstructionPointer = f.instructionPointer;
-
-        var evaluateInstruction = interpret;
-
-        try {
-            // As js doesn't support tail call optimisation the
-            // run function uses a trampoline to execute forth code
-            while (true) {
-                evaluateInstruction();
-                evaluateInstruction = f.wordDefinitions[f.instructionPointer++];
-            }
-        } catch (err) {
-            if (err == Input.EndOfInput) {
-                f._currentInput = savedInput;
-                toIn(savedToIn);
-                f.instructionPointer = savedInstructionPointer;
-                // Pop interpret from returnStack
-                // f.returnStack.pop();
-            } else {
-                throw err;
-            }
-        }
-    });
-
-    var inputString = "";
-
-    function run(input) {
-        var startPosition = inputString.length;
-        inputString += input;
-        f._currentInput = Input(inputString, startPosition, inputString.length, toIn);
-
-        output = "";
-
-        try {
-            // As js doesn't support tail call optimisation the
-            // run function uses a trampoline to execute forth code
-            while (true) {
-                f.currentInstruction();
-                f.currentInstruction = f.wordDefinitions[f.instructionPointer++];
-            }
-        } catch (err) {
-            if (err !== Input.EndOfInput) {
-                console.log(output);
-                console.log("Exception " + err + " at:\n" + printStackTrace());
-                console.log(f._currentInput.inputBuffer());
-                f.currentInstruction = quit;
-                f.stack.clear();
-                throw err;
-            }
-        }
-        return output;
-    }
-
-    function printStackTrace() {
-        var stackTrace = "    " + f.currentInstruction.name + " @ " + (f.instructionPointer - 1);
-        for (var i = f.returnStack.length - 1; i >= 0; i--) {
-            var instruction = f.returnStack[i];
-            stackTrace += "\n    " + f.wordDefinitions[instruction - 1].name + " @ " + (instruction - 1);
-        }
-        return stackTrace;
-    }
-
-    f.run = run;
-    f.currentInstruction = quit;
-    f._lit = _lit;
-    f._INPUT_SOURCE = INPUT_SOURCE;
-    f._base = base;
-    return f;
-}
-
-var Stack = require("./stack.js");
+},{}],6:[function(require,module,exports){
+var Data = require("./data.js"); 
 var Definitions = require("./definitions.js");
 var NumericOperations = require("./numeric-operations.js");
 var BooleanOperations = require("./boolean-operations.js");
@@ -778,32 +505,33 @@ var StackOperations = require("./stack-operations.js");
 var MemoryOperations = require("./memory-operations.js");
 var ControlStructures = require("./control-structures.js");
 var JsInterop = require("./js-interop.js");
+var Input = require("./input.js");
+var Output = require("./output.js")
+var Interpreter = require("./interpreter.js")
 
 function Forth() {
-    var forth = {
-        instructionPointer: 0,
-        wordDefinitions: [],
-        returnStack: new Stack("Return Stack"),
-        stack: new Stack("Stack")
-    };
+    var forth = {};
 
+    Data(forth);
     Definitions(forth);
+    Input(forth);
     NumericOperations(forth);
     BooleanOperations(forth);
     StackOperations(forth);
     MemoryOperations(forth);
     ControlStructures(forth);
+    Output(forth);
     JsInterop(forth);
-    ForthInterpreter(forth);
+    Interpreter(forth);
 
     return forth;
 }
 
 module.exports = Forth;
-},{"./boolean-operations.js":2,"./control-structures.js":3,"./definitions.js":4,"./input.js":6,"./js-interop.js":7,"./memory-operations.js":8,"./numeric-operations.js":9,"./stack-operations.js":10,"./stack.js":11}],6:[function(require,module,exports){
+},{"./boolean-operations.js":2,"./control-structures.js":3,"./data.js":4,"./definitions.js":5,"./input.js":7,"./interpreter.js":8,"./js-interop.js":9,"./memory-operations.js":10,"./numeric-operations.js":11,"./output.js":12,"./stack-operations.js":13}],7:[function(require,module,exports){
 var EndOfInput = (function() {})();
 
-function Input(input, startPosition, endPosition, toIn) {
+function InputWindow(input, startPosition, endPosition, toIn) {
     var inputBufferPosition = startPosition;
     var inputBufferLength = -1;
     refill();
@@ -812,8 +540,8 @@ function Input(input, startPosition, endPosition, toIn) {
         inputBufferPosition += inputBufferLength + 1;
 
         inputBufferLength = input.substring(inputBufferPosition).search(/\n/);
-        if (inputBufferLength == -1 || inputBufferPosition + inputBufferLength > endPosition) 
-          inputBufferLength = endPosition - inputBufferPosition;
+        if (inputBufferLength == -1 || inputBufferPosition + inputBufferLength > endPosition)
+            inputBufferLength = endPosition - inputBufferPosition;
 
         toIn(0);
         return inputBufferPosition < endPosition;
@@ -827,9 +555,9 @@ function Input(input, startPosition, endPosition, toIn) {
         var keyPosition = inputBufferPosition + toIn();
         toIn(toIn() + 1);
         if (keyPosition < endPosition) {
-          return input.charAt(keyPosition);
+            return input.charAt(keyPosition);
         } else {
-          return " ";
+            return " ";
         }
     }
 
@@ -873,36 +601,309 @@ function Input(input, startPosition, endPosition, toIn) {
     }
 
     function source() {
-      return [inputBufferPosition, inputBufferLength];
+        return [inputBufferPosition, inputBufferLength];
     }
 
     function inputBuffer() {
-      return input.substring(inputBufferPosition, inputBufferPosition + inputBufferLength);
+        return input.substring(inputBufferPosition, inputBufferPosition + inputBufferLength);
     }
 
     function subInput(position, length) {
-      return Input(input, position, position + length, toIn);
+        return InputWindow(input, position, position + length, toIn);
     }
 
     function charCodeAt(index) {
-      return input.charCodeAt(index);
+        return input.charCodeAt(index);
     }
 
     return {
-      readWord: readWord,
-      readKey: readKey,
-      parse: parse,
-      refill: refill,
-      inputBuffer: inputBuffer,
-      source: source,
-      charCodeAt: charCodeAt,
-      subInput: subInput
+        readWord: readWord,
+        readKey: readKey,
+        parse: parse,
+        refill: refill,
+        inputBuffer: inputBuffer,
+        source: source,
+        charCodeAt: charCodeAt,
+        subInput: subInput
     };
+}
+
+function Input(f) {
+    f._base = f.defvar("base", 10);
+
+    // Input buffer pointer
+    var toIn = f.defvar(">in", 0);
+
+    // Address offset to indicate input addresses 
+    var INPUT_SOURCE = 1 << 31;
+
+    f.defjs("source", function source() {
+        var positionLength = f._currentInput.source();
+        f.stack.push(INPUT_SOURCE + positionLength[0]);
+        f.stack.push(positionLength[1]);
+    });
+
+    f.defjs("refill", function refill() {
+        f.stack.push(f._currentInput.refill());
+    });
+
+    f.defjs("key", function key() {
+        f.stack.push(f._currentInput.readKey().charCodeAt(0));
+    });
+
+    f.defjs("parse", function parse() {
+        var addressLength = f._currentInput.parse(f.stack.pop());
+        f.stack.push(INPUT_SOURCE + addressLength[0]);
+        f.stack.push(addressLength[1]);
+    });
+
+    function readWord(delimiter) {
+        return f._currentInput.readWord(delimiter);
+    };
+
+    var wordBufferStart = f.dataSpace.length;
+    f.dataSpace.length += 32;
+    f.defjs("word", function word() {
+        var delimiter = f.stack.pop();
+        if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
+        f.stack.push(wordBufferStart);
+
+        var word = readWord(delimiter);
+        var length = Math.min(word.length, 31);
+        f.dataSpace[wordBufferStart] = length;
+        for (var i = 0; i < length; i++) {
+            f.dataSpace[wordBufferStart + i + 1] = word.charCodeAt(i);
+        }
+    });
+
+    f.defjs("char", function char() {
+        f.stack.push(readWord().charCodeAt(0));
+    });
+
+    f.defjs("accept", function accept() {
+        var savedInput = f._currentInput;
+        var savedToIn = toIn();
+
+        var maxLength = f.stack.pop();
+        var address = f.stack.pop();
+
+        f.currentInstruction = function acceptCallback() {
+            var received = f._currentInput.inputBuffer().substring(0, maxLength).split("\n")[0];
+
+            f.stack.push(received.length);
+            for (var i = 0; i < received.length; i++) {
+                f._setAddress(address + i, received[i]);
+            }
+
+            f._currentInput = savedInput;
+            toIn(savedToIn);
+        };
+
+        throw Input.EndOfInput;
+    });
+
+    function _parseInt(string, base) {
+        var int = 0;
+        if (string[0] !== "-") { // Positive
+            for (var i = 0; i < string.length; i++) {
+                int *= base;
+                int += parseInt(string[i], base);
+            }
+            return int;
+        } else {
+            for (var j = 1; j < string.length; j++) {
+                int *= base;
+                int -= parseInt(string[j], base);
+            }
+            return int;
+        }
+    }
+
+    // Parse a float in the provide base
+    function _parseFloat(string) {
+        var base = f._base();
+
+        //split the string at the decimal point
+        string = string.split(/\./);
+
+        //if there is nothing before the decimal point, make it 0
+        if (string[0] === '') {
+            string[0] = "0";
+        }
+
+        //if there was a decimal point & something after it
+        if (string.length > 1 && string[1] !== '') {
+            var fractionLength = string[1].length;
+            string[1] = _parseInt(string[1], base);
+            string[1] *= Math.pow(base, -fractionLength);
+            var int = _parseInt(string[0], base);
+            if (int >= 0)
+                return int + string[1];
+            else
+                return int - string[1];
+        }
+
+        //if there wasn't a decimal point or there was but nothing was after it
+        return _parseInt(string[0], base);
+    }
+
+    var inputString = "";
+
+    function newInput(input) {
+        var startPosition = inputString.length;
+        inputString += input;
+        f._currentInput = InputWindow(inputString, startPosition, inputString.length, toIn);
+    }
+
+    var inputStack = [];
+
+    function subInput(position, length) {
+        inputStack.push({
+            input: f._currentInput,
+            toIn: toIn()
+        });
+        f._currentInput = f._currentInput.subInput(position, length);
+    }
+
+    function popInput() {
+        var savedInput = inputStack.pop();
+        f._currentInput = savedInput.input;
+        toIn(savedInput.toIn);
+    }
+
+    f._readWord = readWord;
+    f._newInput = newInput;
+    f._subInput = subInput;
+    f._popInput = popInput;
+    f._parseFloat = _parseFloat;
+    f._INPUT_SOURCE = INPUT_SOURCE;
+    return f;
 }
 
 module.exports = Input;
 module.EndOfInput = EndOfInput;
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
+var Input = require("./input.js");
+
+function Interpreter(f) {
+    function run(input) {
+        f._newInput(input);
+        f._output = "";
+
+        try {
+            // As js doesn't support tail call optimisation the
+            // run function uses a trampoline to execute forth code
+            while (true) {
+                f.currentInstruction();
+                f.currentInstruction = f.dataSpace[f.instructionPointer++];
+            }
+        } catch (err) {
+            if (err !== Input.EndOfInput) {
+                console.error("Exception " + err + " at:\n" + printStackTrace());
+                console.error(f._currentInput.inputBuffer());
+                console.error(f._output);
+                f.currentInstruction = quit;
+                f.stack.clear();
+                throw err;
+            }
+        }
+        return f._output;
+    }
+
+    function interpretWord() {
+        var word = f._readWord();
+        var definition = f.findDefinition(word);
+        if (definition) {
+            if (!f.compiling() || definition.immediate) {
+                f.dataSpace[definition.executionToken]();
+                return;
+            } else {
+                f.dataSpace.push(f.dataSpace[definition.executionToken]);
+            }
+        } else {
+            var num = f._parseFloat(word);
+            if (isNaN(num)) throw "Word not defined: " + word;
+            if (f.compiling()) {
+                f.dataSpace.push(f._lit);
+                f.dataSpace.push(num);
+            } else {
+                f.stack.push(num);
+            }
+        }
+    }
+
+    var interpretInstruction = f.dataSpace.length + 1;
+    var interpret = f.defjs("interpret", function interpret() {
+        f.instructionPointer = interpretInstruction; // Loop after interpret word is called
+        interpretWord();
+    });
+
+    var quit = f.defjs("quit", function quit() {
+        f.compiling(false); // Enter interpretation state
+        f.returnStack.clear(); // Clear return stack
+        f.instructionPointer = interpretInstruction; // Run the interpreter
+    });
+
+    var abort = f.defjs("abort", function abort(error) {
+        f.stack.clear();
+        throw error || "";
+    });
+
+    f.defjs('abort"', function abortQuote() {
+        var error = f._currentInput.parse('"')[2];
+        f.dataSpace.push(function abortQuote() {
+            if (f.stack.pop())
+                abort(error);
+        });
+    }, true); // Immediate
+
+    f.defjs("execute", function execute() {
+        f.dataSpace[f.stack.pop()]();
+    });
+
+    f.defjs("evaluate", function evaluate() {
+        var length = f.stack.pop();
+        var position = f.stack.pop() - f._INPUT_SOURCE;
+        f._subInput(position, length);
+
+        var savedInstructionPointer = f.instructionPointer;
+
+        var evaluateInstruction = interpret;
+
+        try {
+            // As js doesn't support tail call optimisation the
+            // run function uses a trampoline to execute forth code
+            while (true) {
+                evaluateInstruction();
+                evaluateInstruction = f.dataSpace[f.instructionPointer++];
+            }
+        } catch (err) {
+            if (err == Input.EndOfInput) {
+                f._popInput();
+                f.instructionPointer = savedInstructionPointer;
+            } else {
+                throw err;
+            }
+        }
+    });
+
+    function printStackTrace() {
+        var stackTrace = "    " + f.currentInstruction.name + " @ " + (f.instructionPointer - 1);
+        for (var i = f.returnStack.length - 1; i >= 0; i--) {
+            var instruction = f.returnStack[i];
+            stackTrace += "\n    " + f.dataSpace[instruction - 1].name + " @ " + (instruction - 1);
+        }
+        return stackTrace;
+    }
+
+    f.currentInstruction = quit;
+    f.run = run;
+
+    return f;
+}
+
+module.exports = Interpreter;
+},{"./input.js":7}],9:[function(require,module,exports){
 (function (global){
 function JsInterop(f) {
     // Interop
@@ -973,11 +974,11 @@ function JsInterop(f) {
 
     f.defjs("js", function js() {
         if (f.compiling()) {
-            f.wordDefinitions.push(f._lit);
-            f.wordDefinitions.push(f.readWord());
-            f.wordDefinitions.push(JS);
+            f.dataSpace.push(f._lit);
+            f.dataSpace.push(f._readWord());
+            f.dataSpace.push(JS);
         } else {
-            jsInterop(f.readWord());
+            jsInterop(f._readWord());
         }
     }, true);
 
@@ -987,13 +988,13 @@ function JsInterop(f) {
 module.exports = JsInterop;
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{}],8:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 function MemoryOperations(f) {
     function getAddress(address) {
         if (address < 0) {
             return f._currentInput.charCodeAt(address - f._INPUT_SOURCE);
         } else {
-            var value = f.wordDefinitions[address];
+            var value = f.dataSpace[address];
             if (typeof value == "string")
                 return value.charCodeAt(0);
             else
@@ -1005,7 +1006,7 @@ function MemoryOperations(f) {
         if (address < 0) {
             throw "Illegal attempt to change input";
         } else {
-            f.wordDefinitions[address] = value;
+            f.dataSpace[address] = value;
         }
     }
 
@@ -1023,17 +1024,17 @@ function MemoryOperations(f) {
     f.defjs("+!", function addStore() {
         var address = f.stack.pop();
         var data = f.stack.pop();
-        f.wordDefinitions[address] = f.wordDefinitions[address] + data;
+        f.dataSpace[address] = f.dataSpace[address] + data;
     });
 
     f.defjs("-!", function subtractStore() {
         var address = f.stack.pop();
         var data = f.stack.pop();
-        f.wordDefinitions[address] = f.wordDefinitions[address] - data;
+        f.dataSpace[address] = f.dataSpace[address] - data;
     });
 
     f.defjs("here", function here() {
-        f.stack.push(f.wordDefinitions.length);
+        f.stack.push(f.dataSpace.length);
     });
 
     f._getAddress = getAddress;
@@ -1042,24 +1043,8 @@ function MemoryOperations(f) {
 }
 
 module.exports = MemoryOperations;
-},{}],9:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 function NumericOperations(f) {
-    f.defjs("1+", function inc() {
-        f.stack.push(f.stack.pop() + 1);
-    });
-
-    f.defjs("1-", function dec() {
-        f.stack.push(f.stack.pop() - 1);
-    });
-
-    f.defjs("2*", function inc() {
-        f.stack.push(f.stack.pop() << 1);
-    });
-
-    f.defjs("2/", function inc() {
-        f.stack.push(f.stack.pop() >> 1);
-    });
-
     f.defjs("+", function plus() {
         var first = f.stack.pop();
         f.stack.push(f.stack.pop() + first);
@@ -1080,10 +1065,20 @@ function NumericOperations(f) {
         f.stack.push(f.stack.pop() / first);
     });
 
+    f.defjs("2*", function inc() {
+        f.stack.push(f.stack.pop() << 1);
+    });
+
+    f.defjs("2/", function inc() {
+        f.stack.push(f.stack.pop() >> 1);
+    });
+
     f.defjs("mod", function mod() {
         var first = f.stack.pop();
         f.stack.push(f.stack.pop() % first);
     });
+
+    var maxUInt = Math.pow(2, 32);
 
     f.defjs("um/mod", function unsignedDivideMod() {
         var divisor = f.stack.pop() >>> 0;
@@ -1143,14 +1138,59 @@ function NumericOperations(f) {
         f.stack.push(-f.stack.pop());
     });
 
-    f.defjs("unsigned", function unsigned() {
-        f.stack.push(f.stack.pop() >>> 0);
+    return f;
+}
+
+module.exports = NumericOperations;
+},{}],12:[function(require,module,exports){
+function Output(f) {
+
+    f._output = "";
+
+    f.defjs("cr", function cr() {
+        f._output += "\n";
+    });
+
+    f.defjs(".", function dot() {
+        var value;
+        var top = f.stack.pop();
+
+        if (typeof top === "undefined")
+            value = "undefined";
+        else if (top === null)
+            value = "null";
+        else
+            value = top.toString(f._base()); // Output numbers in current base
+
+        f._output += value + " ";
+    });
+
+    f.defjs("emit", function emit() {
+        var value = f.stack.pop();
+        if (typeof value === "number")
+            f._output += String.fromCharCode(value);
+        else
+            f._output += value;
+    });
+
+    f.defjs("type", function type() {
+        var length = f.stack.pop();
+        var address = f.stack.pop();
+        for (var i = 0; i < length; i++) {
+            var value = f._getAddress(address + i);
+            if (typeof value === "number") {
+                f._output += String.fromCharCode(value);
+            } else
+                f._output += value;
+        }
     });
 
     // Numeric output
-    var numericOutputStart = f.wordDefinitions.length;
+    var maxUInt = Math.pow(2, 32);
+
+    var numericOutputStart = f.dataSpace.length;
     var numericOutput = "";
-    f.wordDefinitions.length += 128;
+    f.dataSpace.length += 128;
 
     f.defjs("<#", function initialiseNumericOutput() {
         numericOutput = "";
@@ -1167,7 +1207,7 @@ function NumericOperations(f) {
         f.stack.pop();
         f.stack.pop();
         for (var i = 0; i < numericOutput.length; i++) {
-            f.wordDefinitions[numericOutputStart + i] = numericOutput[numericOutput.length - i - 1];
+            f.dataSpace[numericOutputStart + i] = numericOutput[numericOutput.length - i - 1];
         }
         f.stack.push(numericOutputStart);
         f.stack.push(numericOutput.length);
@@ -1178,7 +1218,6 @@ function NumericOperations(f) {
             numericOutput += "-";
     });
 
-    var maxUInt = Math.pow(2, 32);
     f.defjs("#", function writeNextNumericOutput() {
         var bigPart = f.stack.pop() >>> 0;
         var smallPart = f.stack.pop() >>> 0;
@@ -1242,8 +1281,8 @@ function NumericOperations(f) {
     return f;
 }
 
-module.exports = NumericOperations;
-},{}],10:[function(require,module,exports){
+module.exports = Output;
+},{}],13:[function(require,module,exports){
 function StackOperations(f) {
     f.defjs("drop", function drop() {
         f.stack.pop();
@@ -1351,7 +1390,7 @@ function StackOperations(f) {
 }
 
 module.exports = StackOperations;
-},{}],11:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 function Stack(name) {
     var data = [];
 

@@ -67,11 +67,11 @@ function JsInterop(f) {
 
     f.defjs("js", function js() {
         if (f.compiling()) {
-            f.wordDefinitions.push(f._lit);
-            f.wordDefinitions.push(f.readWord());
-            f.wordDefinitions.push(JS);
+            f.dataSpace.push(f._lit);
+            f.dataSpace.push(f._readWord());
+            f.dataSpace.push(JS);
         } else {
-            jsInterop(f.readWord());
+            jsInterop(f._readWord());
         }
     }, true);
 

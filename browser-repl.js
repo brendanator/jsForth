@@ -17,7 +17,7 @@ function Repl() {
         xmlhttp.send();
     }
     loadForth("forth/forth.fth");
-    // loadForth("forth/ans-forth-tests.fth");
+    loadForth("forth/ans-forth-tests.fth");
 
     var inputHistory = [""];
     var historyCount = 0;

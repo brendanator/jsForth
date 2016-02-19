@@ -14,37 +14,37 @@ function Definitions(f) {
     };
 
     function defheader(name, immediate, hidden) {
-        f.wordDefinitions.push(new Header(latest(), name, immediate, hidden, f.wordDefinitions.length + 1));
-        latest(f.wordDefinitions.length - 1);
+        f.dataSpace.push(new Header(latest(), name, immediate, hidden, f.dataSpace.length + 1));
+        latest(f.dataSpace.length - 1);
     };
 
     f.defjs = function defjs(name, fn, immediate, displayName) {
         defheader(displayName || name, immediate);
-        f.wordDefinitions.push(fn);
+        f.dataSpace.push(fn);
         return fn;
     };
 
     f.defvar = function defvar(name, initial) {
         defheader(name);
-        var varAddress = f.wordDefinitions.length + 1;
-        f.wordDefinitions.push(function variable() {
+        var varAddress = f.dataSpace.length + 1;
+        f.dataSpace.push(function variable() {
             f.stack.push(varAddress);
         });
-        f.wordDefinitions.push(initial);
+        f.dataSpace.push(initial);
 
         return function(value) {
             if (value !== undefined)
-                f.wordDefinitions[varAddress] = value;
+                f.dataSpace[varAddress] = value;
             else
-                return f.wordDefinitions[varAddress];
+                return f.dataSpace[varAddress];
         };
     };
 
-    latest = f.defvar("latest", f.wordDefinitions.length); // Replace existing function definition
+    latest = f.defvar("latest", f.dataSpace.length); // Replace existing function definition
     f.compiling = f.defvar("state", 0);
 
     f.compileEnter = function compileEnter(name) {
-        var instruction = f.wordDefinitions.length + 1;
+        var instruction = f.dataSpace.length + 1;
 
         var enter;
         try {
@@ -62,14 +62,14 @@ function Definitions(f) {
             };
         }
 
-        f.wordDefinitions.push(enter);
+        f.dataSpace.push(enter);
         return enter;
     };
 
     f.findDefinition = function findDefinition(word) {
         var current = latest();
         while (current !== null) {
-            var wordDefinition = f.wordDefinitions[current];
+            var wordDefinition = f.dataSpace[current];
             // Case insensitive
             if (wordDefinition.name.toLowerCase() == word.toLowerCase() && !wordDefinition.hidden)
                 return wordDefinition;
@@ -79,7 +79,7 @@ function Definitions(f) {
     };
 
     f.defjs(":", function colon() {
-        var name = f.readWord();
+        var name = f._readWord();
         defheader(name, false, true);
         f.compileEnter(name);
         f.compiling(true);
@@ -87,7 +87,7 @@ function Definitions(f) {
 
     f.defjs(":noname", function noname() {
         defheader("", false, true);
-        f.stack.push(f.wordDefinitions.length);
+        f.stack.push(f.dataSpace.length);
         f.compileEnter("_noname_");
         f.compiling(true);
     });
@@ -97,8 +97,8 @@ function Definitions(f) {
     });
 
     f.defjs(";", function semicolon() {
-        f.wordDefinitions.push(exit);
-        f.wordDefinitions[latest()].hidden = false;
+        f.dataSpace.push(exit);
+        f.dataSpace[latest()].hidden = false;
         f.compiling(false);
     }, true); // Immediate
 
@@ -128,23 +128,23 @@ function Definitions(f) {
     });
 
     f.defjs("create", function create() {
-        defheader(f.readWord());
-        var dataFieldAddress = f.wordDefinitions.length + 1;
-        f.wordDefinitions.push(function pushDataFieldAddress() {
+        defheader(f._readWord());
+        var dataFieldAddress = f.dataSpace.length + 1;
+        f.dataSpace.push(function pushDataFieldAddress() {
             f.stack.push(dataFieldAddress);
         });
     });
 
     f.defjs("allot", function allot() {
-        f.wordDefinitions.length += f.stack.pop();
+        f.dataSpace.length += f.stack.pop();
     });
 
     f.defjs(",", function comma() {
-        f.wordDefinitions.push(f.stack.pop());
+        f.dataSpace.push(f.stack.pop());
     });
 
     f.defjs("compile,", function compileComma() {
-        f.wordDefinitions.push(f.wordDefinitions[f.stack.pop()]);
+        f.dataSpace.push(f.dataSpace[f.stack.pop()]);
     });
 
     f.defjs("[", function lbrac() {
@@ -156,25 +156,31 @@ function Definitions(f) {
     });
 
     f.defjs("immediate", function immediate() {
-        var wordDefinition = f.wordDefinitions[latest()];
+        var wordDefinition = f.dataSpace[latest()];
         wordDefinition.immediate = !wordDefinition.immediate;
     }, true); // Immediate
 
     f.defjs("hidden", function hidden() {
-        var wordDefinition = f.wordDefinitions[f.stack.pop()];
+        var wordDefinition = f.dataSpace[f.stack.pop()];
         wordDefinition.hidden = !wordDefinition.hidden;
     });
 
     f.defjs("'", function tick() {
-        f.stack.push(f.findDefinition(f.readWord()).executionToken);
+        f.stack.push(f.findDefinition(f._readWord()).executionToken);
+    });
+
+    var _lit = f.defjs("lit", function lit() {
+        f.stack.push(f.dataSpace[f.instructionPointer]);
+        f.instructionPointer++;
     });
 
     f.defjs("[']", function bracketTick() {
-        f.wordDefinitions.push(f._lit);
-        f.wordDefinitions.push(f.findDefinition(f.readWord()).executionToken);
+        f.dataSpace.push(f._lit);
+        f.dataSpace.push(f.findDefinition(f._readWord()).executionToken);
     }, true);
 
     f._latest = latest
+    f._lit = _lit;
     return f;
 }
 

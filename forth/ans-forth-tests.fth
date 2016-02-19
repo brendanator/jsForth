@@ -67,13 +67,6 @@ CREATE EXPECTED-RESULTS 20 CELLS ALLOT
    ELSE >IN ! DROP
    THEN ;
 
-\ Redefine / to be integer division
-: / / js /Math.floor{1} ;
-: /mod 2dup mod -rot / ;
-: s>d max-uint /mod ; \ convert single to double
-: */mod rot * swap /mod ;
-: */ -rot * swap / ;
-
 
 \ From: John Hayes S1I
 \ Subject: core.fr
@@ -1071,5 +1064,3 @@ TESTING DICTIONARY SEARCH RULES
 { : GDX   123 ; : GDX   GDX 234 ; -> }
 
 { GDX -> 123 234 }
-
-decimal

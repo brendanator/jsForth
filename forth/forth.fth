@@ -13,7 +13,7 @@
 : begin here ; immediate
 : again ['] jump compile, here - , ; immediate
 : until ['] jumpIfFalse compile, here - , ; immediate
-: while ['] jumpIfFalse compile, 0 , here 1- swap ; immediate
+: while ['] jumpIfFalse compile, 0 , here 1 - swap ; immediate
 : repeat ['] jump compile, here - , dup here swap - swap ! ; immediate
 
 \ Compilation: ( "<spaces>name" -- )
@@ -43,9 +43,9 @@
 : ." [char] " parse swap postpone literal postpone literal ['] type compile, ; immediate
 
 : cell 1 ;
-: cell+ 1+ ;
+: cell+ 1 + ;
 : cells ;
-: char+ 1+ ;
+: char+ 1 + ;
 : chars ;
 : 2@ dup cell+ @ swap @ ;
 : 2! swap over ! cell+ ! ;
@@ -70,7 +70,7 @@
 ;
 
 : nip swap drop ;
-: count dup 1+ swap @ ;
+: count dup 1 + swap @ ;
 
 : constant create , does> @ ;
 : variable create cell allot ;
@@ -84,17 +84,21 @@
 : 0> 0 > ;
 : 0<= 0 <= ;
 : 0>= 0 >= ;
+: 1+ 1 + ;
+: 1- 1 - ;
 
 32 2 js /Math.pow{2} constant max-uint
 : floor js /Math.floor{1} ;
 : / / floor ;
 : */ -rot * swap / ;
 : /mod 2dup mod -rot / ;
+: */mod rot * swap /mod ;
 : s>d max-uint /mod ; \ convert single to double
+: m* * s>d ; \ multiply 2 singles into a double
+: unsigned 0 rshift ;
 : u< unsigned swap unsigned > ;
 : u> unsigned swap unsigned < ;
 : um* unsigned swap unsigned * s>d ;
-: m* * s>d ; \ multiply 2 singles into a double
 
 : u. ( u -- ) unsigned . ;
 

@@ -3,7 +3,7 @@ function MemoryOperations(f) {
         if (address < 0) {
             return f._currentInput.charCodeAt(address - f._INPUT_SOURCE);
         } else {
-            var value = f.wordDefinitions[address];
+            var value = f.dataSpace[address];
             if (typeof value == "string")
                 return value.charCodeAt(0);
             else
@@ -15,7 +15,7 @@ function MemoryOperations(f) {
         if (address < 0) {
             throw "Illegal attempt to change input";
         } else {
-            f.wordDefinitions[address] = value;
+            f.dataSpace[address] = value;
         }
     }
 
@@ -33,17 +33,17 @@ function MemoryOperations(f) {
     f.defjs("+!", function addStore() {
         var address = f.stack.pop();
         var data = f.stack.pop();
-        f.wordDefinitions[address] = f.wordDefinitions[address] + data;
+        f.dataSpace[address] = f.dataSpace[address] + data;
     });
 
     f.defjs("-!", function subtractStore() {
         var address = f.stack.pop();
         var data = f.stack.pop();
-        f.wordDefinitions[address] = f.wordDefinitions[address] - data;
+        f.dataSpace[address] = f.dataSpace[address] - data;
     });
 
     f.defjs("here", function here() {
-        f.stack.push(f.wordDefinitions.length);
+        f.stack.push(f.dataSpace.length);
     });
 
     f._getAddress = getAddress;
