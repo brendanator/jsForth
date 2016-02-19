@@ -33,7 +33,7 @@ function ForthInterpreter(f) {
 
     f.readWord = function readWord() {
         return f._currentInput.readWord();
-    }
+    };
 
     var wordBufferStart = f.wordDefinitions.length;
     f.wordDefinitions.length += 32;
@@ -62,9 +62,12 @@ function ForthInterpreter(f) {
         var address = f.stack.pop();
 
         f.currentInstruction = function acceptCallback() {
-            var received = f._currentInput.inputBuffer();
-            f.stack.push(1);
-            f._setAddress(address, received.substring(0, maxLength).split("\n")[0]);
+            var received = f._currentInput.inputBuffer().substring(0, maxLength).split("\n")[0];
+
+            f.stack.push(received.length);
+            for (var i = 0; i < received.length; i++) {
+                f._setAddress(address + i, received[i]);
+            }
 
             f._currentInput = savedInput;
             toIn(savedToIn);
@@ -183,16 +186,16 @@ function ForthInterpreter(f) {
     });
 
 
-    var interpretInstruction = f.wordDefinitions.length+1;
+    var interpretInstruction = f.wordDefinitions.length + 1;
     var interpret = f.defjs("interpret", function interpret() {
-        f.instructionPointer = interpretInstruction;  // Loop after interpret word is called
+        f.instructionPointer = interpretInstruction; // Loop after interpret word is called
         interpretWord();
     });
 
     var quit = f.defjs("quit", function quit() {
-        f.compiling(false);                           // Enter interpretation state
-        f.returnStack.clear();                        // Clear return stack
-        f.instructionPointer = interpretInstruction;  // Run the interpreter
+        f.compiling(false); // Enter interpretation state
+        f.returnStack.clear(); // Clear return stack
+        f.instructionPointer = interpretInstruction; // Run the interpreter
     });
 
     function abort(error) {
@@ -242,6 +245,7 @@ function ForthInterpreter(f) {
     });
 
     var inputString = "";
+
     function run(input) {
         var startPosition = inputString.length;
         inputString += input;
@@ -282,6 +286,7 @@ function ForthInterpreter(f) {
     f.currentInstruction = quit;
     f._lit = _lit;
     f._INPUT_SOURCE = INPUT_SOURCE;
+    f._base = base;
     return f;
 }
 
@@ -290,7 +295,7 @@ var Definitions = require("./definitions.js");
 var NumericOperations = require("./numeric-operations.js");
 var BooleanOperations = require("./boolean-operations.js");
 var StackOperations = require("./stack-operations.js");
-var MemoryOperations = require("./memory-operations.js")
+var MemoryOperations = require("./memory-operations.js");
 var ControlStructures = require("./control-structures.js");
 var JsInterop = require("./js-interop.js");
 

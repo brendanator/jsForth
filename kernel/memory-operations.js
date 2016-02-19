@@ -3,7 +3,11 @@ function MemoryOperations(f) {
         if (address < 0) {
             return f._currentInput.charCodeAt(address - f._INPUT_SOURCE);
         } else {
-            return f.wordDefinitions[address];
+            var value = f.wordDefinitions[address];
+            if (typeof value == "string")
+                return value.charCodeAt(0);
+            else
+                return value;
         }
     }
 

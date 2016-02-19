@@ -88,19 +88,12 @@
 32 2 js /Math.pow{2} constant max-uint
 : floor js /Math.floor{1} ;
 : / / floor ;
+: */ -rot * swap / ;
 : /mod 2dup mod -rot / ;
 : s>d max-uint /mod ; \ convert single to double
-: d>s max-uint * + ;
 : u< unsigned swap unsigned > ;
 : u> unsigned swap unsigned < ;
 : um* unsigned swap unsigned * s>d ;
-: */ -rot * swap / ;
-: um/mod unsigned swap unsigned swap /mod ;
-: fm/mod dup rot / rot / + ;
-: sm/rem -rot d>s swap /mod ;
-: */mod */ ;
-\  ( n1 n2 -- d )
-\    d is the signed product of n1 times n2.
 : m* * s>d ; \ multiply 2 singles into a double
 
 : u. ( u -- ) unsigned . ;
