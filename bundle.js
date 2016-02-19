@@ -306,29 +306,24 @@ function Header(link, name, immediate, hidden, executionToken) {
 
 function Definitions(f) {
 
-    f._latest = (function() {
-        var val = null;
-        return function(value) {
-            if (value !== undefined)
-                val = value;
-            else
-                return val;
-        };
-    })();
+    // Temporary definition until latest is defined as a variable
+    function latest() {
+        return null;
+    };
 
-    f.defheader = function defheader(name, immediate, hidden) {
-        f.wordDefinitions.push(new Header(f._latest(), name, immediate, hidden, f.wordDefinitions.length + 1));
-        f._latest(f.wordDefinitions.length - 1);
+    function defheader(name, immediate, hidden) {
+        f.wordDefinitions.push(new Header(latest(), name, immediate, hidden, f.wordDefinitions.length + 1));
+        latest(f.wordDefinitions.length - 1);
     };
 
     f.defjs = function defjs(name, fn, immediate, displayName) {
-        f.defheader(displayName || name, immediate);
+        defheader(displayName || name, immediate);
         f.wordDefinitions.push(fn);
         return fn;
     };
 
     f.defvar = function defvar(name, initial) {
-        f.defheader(name);
+        defheader(name);
         var varAddress = f.wordDefinitions.length + 1;
         f.wordDefinitions.push(function variable() {
             f.stack.push(varAddress);
@@ -342,6 +337,9 @@ function Definitions(f) {
                 return f.wordDefinitions[varAddress];
         };
     };
+
+    latest = f.defvar("latest", f.wordDefinitions.length); // Replace existing function definition
+    f.compiling = f.defvar("state", 0);
 
     f.compileEnter = function compileEnter(name) {
         var instruction = f.wordDefinitions.length + 1;
@@ -366,23 +364,8 @@ function Definitions(f) {
         return enter;
     };
 
-    f.defword = function defword(name, words, immediate, displayName) {
-        f.defheader(name, immediate);
-        var enter = f.compileEnter(displayName || name);
-        f.wordDefinitions = f.wordDefinitions.concat(
-            words.map(function(word) {
-                if (typeof word !== "string") {
-                    return word;
-                } else {
-                    return f.wordDefinitions[f.findDefinition(word).executionToken];
-                }
-            })
-        );
-        return enter;
-    };
-
     f.findDefinition = function findDefinition(word) {
-        var current = f._latest();
+        var current = latest();
         while (current !== null) {
             var wordDefinition = f.wordDefinitions[current];
             // Case insensitive
@@ -395,13 +378,13 @@ function Definitions(f) {
 
     f.defjs(":", function colon() {
         var name = f.readWord();
-        f.defheader(name, false, true);
+        defheader(name, false, true);
         f.compileEnter(name);
         f.compiling(true);
     });
 
     f.defjs(":noname", function noname() {
-        f.defheader("", false, true);
+        defheader("", false, true);
         f.stack.push(f.wordDefinitions.length);
         f.compileEnter("_noname_");
         f.compiling(true);
@@ -413,7 +396,7 @@ function Definitions(f) {
 
     f.defjs(";", function semicolon() {
         f.wordDefinitions.push(exit);
-        f.wordDefinitions[f._latest()].hidden = false;
+        f.wordDefinitions[latest()].hidden = false;
         f.compiling(false);
     }, true); // Immediate
 
@@ -443,7 +426,7 @@ function Definitions(f) {
     });
 
     f.defjs("create", function create() {
-        f.defheader(f.readWord());
+        defheader(f.readWord());
         var dataFieldAddress = f.wordDefinitions.length + 1;
         f.wordDefinitions.push(function pushDataFieldAddress() {
             f.stack.push(dataFieldAddress);
@@ -471,7 +454,7 @@ function Definitions(f) {
     });
 
     f.defjs("immediate", function immediate() {
-        var wordDefinition = f.wordDefinitions[f._latest()];
+        var wordDefinition = f.wordDefinitions[latest()];
         wordDefinition.immediate = !wordDefinition.immediate;
     }, true); // Immediate
 
@@ -489,6 +472,7 @@ function Definitions(f) {
         f.wordDefinitions.push(f.findDefinition(f.readWord()).executionToken);
     }, true);
 
+    f._latest = latest
     return f;
 }
 
@@ -497,8 +481,6 @@ module.exports = Definitions;
 var Input = require("./input.js");
 
 function ForthInterpreter(f) {
-    f.compiling = f.defvar("state", 0);
-    f._latest = f.defvar("latest", f.wordDefinitions.length); // Replace existing function definition
     var base = f.defvar("base", 10);
     var toIn = f.defvar(">in", 0);
 
@@ -681,16 +663,17 @@ function ForthInterpreter(f) {
     });
 
 
-    var interpret = f.defword("interpret", [
-        interpretWord, // Interpret the next word ..
-        "jump", -2 // .. and loop forever
-    ], "semicolon");
+    var interpretInstruction = f.wordDefinitions.length+1;
+    var interpret = f.defjs("interpret", function interpret() {
+        f.instructionPointer = interpretInstruction;  // Loop after interpret word is called
+        interpretWord();
+    });
 
-    var quit = f.defword("quit", [
-        "[", // Enter interpretation state
-        "clearReturnStack", // Clear the return f.stack
-        "interpret" // Run the intepreter
-    ]);
+    var quit = f.defjs("quit", function quit() {
+        f.compiling(false);                           // Enter interpretation state
+        f.returnStack.clear();                        // Clear return stack
+        f.instructionPointer = interpretInstruction;  // Run the interpreter
+    });
 
     function abort(error) {
         f.stack.clear();
@@ -731,7 +714,7 @@ function ForthInterpreter(f) {
                 toIn(savedToIn);
                 f.instructionPointer = savedInstructionPointer;
                 // Pop interpret from returnStack
-                f.returnStack.pop();
+                // f.returnStack.pop();
             } else {
                 throw err;
             }
@@ -1231,10 +1214,6 @@ function StackOperations(f) {
     f.defjs("2r@", function twoRFetch() {
         f.stack.push(f.returnStack.peek(2));
         f.stack.push(f.returnStack.peek(1));
-    });
-
-    f.defjs("clearReturnStack", function clearReturnStack() {
-        f.returnStack.clear();
     });
 
     return f;

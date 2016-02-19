@@ -1,8 +1,6 @@
 var Input = require("./input.js");
 
 function ForthInterpreter(f) {
-    f.compiling = f.defvar("state", 0);
-    f._latest = f.defvar("latest", f.wordDefinitions.length); // Replace existing function definition
     var base = f.defvar("base", 10);
     var toIn = f.defvar(">in", 0);
 
@@ -185,16 +183,17 @@ function ForthInterpreter(f) {
     });
 
 
-    var interpret = f.defword("interpret", [
-        interpretWord, // Interpret the next word ..
-        "jump", -2 // .. and loop forever
-    ], "semicolon");
+    var interpretInstruction = f.wordDefinitions.length+1;
+    var interpret = f.defjs("interpret", function interpret() {
+        f.instructionPointer = interpretInstruction;  // Loop after interpret word is called
+        interpretWord();
+    });
 
-    var quit = f.defword("quit", [
-        "[", // Enter interpretation state
-        "clearReturnStack", // Clear the return f.stack
-        "interpret" // Run the intepreter
-    ]);
+    var quit = f.defjs("quit", function quit() {
+        f.compiling(false);                           // Enter interpretation state
+        f.returnStack.clear();                        // Clear return stack
+        f.instructionPointer = interpretInstruction;  // Run the interpreter
+    });
 
     function abort(error) {
         f.stack.clear();
@@ -235,7 +234,7 @@ function ForthInterpreter(f) {
                 toIn(savedToIn);
                 f.instructionPointer = savedInstructionPointer;
                 // Pop interpret from returnStack
-                f.returnStack.pop();
+                // f.returnStack.pop();
             } else {
                 throw err;
             }

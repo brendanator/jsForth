@@ -101,10 +101,6 @@ function StackOperations(f) {
         f.stack.push(f.returnStack.peek(1));
     });
 
-    f.defjs("clearReturnStack", function clearReturnStack() {
-        f.returnStack.clear();
-    });
-
     return f;
 }
 
