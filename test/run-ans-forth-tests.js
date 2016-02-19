@@ -1,10 +1,11 @@
-#! usr/bin/env node
+#! /usr/bin/env node
 
+var Forth = require("../kernel/forth.js")
 var fs = require("fs");
 
-fs.readFile("../forth/forth.fth", function(err, data) {
-    fs.readFile("../forth/ans-forth-tests.fth", function(err, tests) {
-        var forth = new require("../kernel/forth.js")();
+var forth = new Forth();
+fs.readFile("./forth/forth.fth", function(err, data) {
+    fs.readFile("./test/ans-forth-tests.fth", function(err, tests) {
         console.log(forth.run(data.toString()));
         console.log(forth.run(tests.toString()));
         console.log(forth.run("some magic input!"));

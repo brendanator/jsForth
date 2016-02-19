@@ -1,4 +1,4 @@
-var Forth = require("./kernel/forth.js");
+var Forth = require("../kernel/forth.js");
 
 function Repl() {
     "use strict";
@@ -17,7 +17,7 @@ function Repl() {
         xmlhttp.send();
     }
     loadForth("forth/forth.fth");
-    loadForth("forth/ans-forth-tests.fth");
+    // loadForth("test/ans-forth-tests.fth");
 
     var inputHistory = [""];
     var historyCount = 0;

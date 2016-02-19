@@ -6,12 +6,7 @@ function Interpreter(f) {
         f._output = "";
 
         try {
-            // As js doesn't support tail call optimisation the
-            // run function uses a trampoline to execute forth code
-            while (true) {
-                f.currentInstruction();
-                f.currentInstruction = f.dataSpace[f.instructionPointer++];
-            }
+            runInterpreter()
         } catch (err) {
             if (err !== Input.EndOfInput) {
                 console.error("Exception " + err + " at:\n" + printStackTrace());
@@ -24,6 +19,45 @@ function Interpreter(f) {
         }
         return f._output;
     }
+
+    function runInterpreter() {
+        // As js doesn't support tail call optimisation the
+        // run function uses a trampoline to execute forth code
+        while (true) {
+            f.currentInstruction();
+            f.currentInstruction = f.dataSpace[f.instructionPointer++];
+        }        
+    }
+
+    function printStackTrace() {
+        var stackTrace = "    " + f.currentInstruction.name + " @ " + (f.instructionPointer - 1);
+        for (var i = f.returnStack.length - 1; i >= 0; i--) {
+            var instruction = f.returnStack[i];
+            stackTrace += "\n    " + f.dataSpace[instruction - 1].name + " @ " + (instruction - 1);
+        }
+        return stackTrace;
+    }
+
+    f.defjs("evaluate", function evaluate() {
+        var length = f.stack.pop();
+        var position = f.stack.pop() - f._INPUT_SOURCE;
+        f._subInput(position, length);
+
+        var savedInstructionPointer = f.instructionPointer;
+
+        f.currentInstruction = interpret;
+
+        try {
+            runInterpreter();
+        } catch (err) {
+            if (err == Input.EndOfInput) {
+                f._popInput();
+                f.instructionPointer = savedInstructionPointer;
+            } else {
+                throw err;
+            }
+        }
+    });
 
     function interpretWord() {
         var word = f._readWord();
@@ -76,41 +110,7 @@ function Interpreter(f) {
         f.dataSpace[f.stack.pop()]();
     });
 
-    f.defjs("evaluate", function evaluate() {
-        var length = f.stack.pop();
-        var position = f.stack.pop() - f._INPUT_SOURCE;
-        f._subInput(position, length);
-
-        var savedInstructionPointer = f.instructionPointer;
-
-        var evaluateInstruction = interpret;
-
-        try {
-            // As js doesn't support tail call optimisation the
-            // run function uses a trampoline to execute forth code
-            while (true) {
-                evaluateInstruction();
-                evaluateInstruction = f.dataSpace[f.instructionPointer++];
-            }
-        } catch (err) {
-            if (err == Input.EndOfInput) {
-                f._popInput();
-                f.instructionPointer = savedInstructionPointer;
-            } else {
-                throw err;
-            }
-        }
-    });
-
-    function printStackTrace() {
-        var stackTrace = "    " + f.currentInstruction.name + " @ " + (f.instructionPointer - 1);
-        for (var i = f.returnStack.length - 1; i >= 0; i--) {
-            var instruction = f.returnStack[i];
-            stackTrace += "\n    " + f.dataSpace[instruction - 1].name + " @ " + (instruction - 1);
-        }
-        return stackTrace;
-    }
-
+    // Set initial instruction
     f.currentInstruction = quit;
     f.run = run;
 

@@ -19,7 +19,7 @@ function Repl() {
         xmlhttp.send();
     }
     loadForth("forth/forth.fth");
-    // loadForth("test/ans-forth-tests.fth");
+    loadForth("test/ans-forth-tests.fth");
 
     var inputHistory = [""];
     var historyCount = 0;
@@ -1064,8 +1064,7 @@ function NumericOperations(f) {
 
     f.defjs("/", function divide() {
         var first = f.stack.pop();
-        var second = f.stack.pop();
-        f.stack.push(Math.trunc(second / first));
+        f.stack.push(f.stack.pop() / first);
     });
 
     f.defjs("2*", function inc() {
@@ -1081,11 +1080,7 @@ function NumericOperations(f) {
         f.stack.push(f.stack.pop() % first);
     });
 
-    f.defjs("s>d", function singleToDouble() {
-        var value = Long.fromInt(f.stack.pop());
-        f.stack.push(value.low);
-        f.stack.push(value.high);        
-    });
+    var maxUInt = Math.pow(2, 32);
 
     f.defjs("m*", function() {
         var first = Long.fromInt(f.stack.pop());
@@ -1093,17 +1088,6 @@ function NumericOperations(f) {
         var result = first.mul(second);
         f.stack.push(result.low);
         f.stack.push(result.high);
-    });
-
-    f.defjs("*/mod", function multiplyDivideMod() {
-        var divisor = Long.fromInt(f.stack.pop());
-        var first = Long.fromInt(f.stack.pop());
-        var second = Long.fromInt(f.stack.pop());
-        var mult = first.mul(second);
-        var quotient = mult.div(divisor).toInt();
-        var mod = mult.mod(divisor).toInt();
-        f.stack.push(mod);
-        f.stack.push(quotient);
     });
 
     f.defjs("um*", function() {
@@ -1115,35 +1099,32 @@ function NumericOperations(f) {
     });
 
     f.defjs("um/mod", function unsignedDivideMod() {
-        var divisor = Long.fromInt(f.stack.pop());
-        var bigPart = f.stack.pop();
+        var divisor = f.stack.pop() >>> 0;
+        var bigPart = f.stack.pop() >>> 0;
         var smallPart = f.stack.pop();
-        var long = new Long(smallPart, bigPart, true);
-        var quotient = long.div(divisor).toInt();
-        var mod = long.mod(divisor).toInt();
+        var quotient = (bigPart % divisor) * Math.floor(maxUInt / divisor) + Math.floor(smallPart / divisor);
+        var mod = Math.floor((bigPart % divisor) + (maxUInt % divisor) + (smallPart % divisor) & divisor);
         f.stack.push(mod);
         f.stack.push(quotient);
     });
 
     f.defjs("fm/mod", function flooredDivideMod() {
-        var divisor = Long.fromInt(f.stack.pop());
+        var divisor = f.stack.pop();
         var bigPart = f.stack.pop();
         var smallPart = f.stack.pop();
-        var long = new Long(smallPart, bigPart);
-        var quotient = long.div(divisor).toInt();
-        var mod = long.mod(divisor).toInt();
+        var quotient = (bigPart % divisor) * Math.floor(maxUInt / divisor) + Math.floor(smallPart / divisor);
+        var mod = Math.floor((bigPart % divisor) + (maxUInt % divisor) + (smallPart % divisor) & divisor);
         f.stack.push(mod);
         f.stack.push(quotient);
     });
 
     f.defjs("sm/rem", function symmetricDivideRem() {
-        var divisor = Long.fromInt(f.stack.pop());
+        var divisor = f.stack.pop();
         var bigPart = f.stack.pop();
         var smallPart = f.stack.pop();
-        var long = new Long(smallPart, bigPart);
-        var quotient = long.div(divisor).toInt();
-        var mod = long.mod(divisor).toInt();
-        f.stack.push(mod);
+        var quotient = (bigPart % divisor) * Math.floor(maxUInt / divisor) + Math.trunc(smallPart / divisor);
+        var rem = Math.floor((bigPart % divisor) + (maxUInt % divisor) + (smallPart % divisor) & divisor);
+        f.stack.push(rem);
         f.stack.push(quotient);
     });
 
@@ -1180,8 +1161,6 @@ function NumericOperations(f) {
 
 module.exports = NumericOperations;
 },{"long":15}],12:[function(require,module,exports){
-var Long = require("long")
-
 function Output(f) {
 
     f._output = "";
@@ -1290,12 +1269,11 @@ function Output(f) {
     });
 
     f.defjs(">number", function toNumber() {
-        var base = Long.fromInt(f._base());
+        var base = f._base();
         var length = f.stack.pop();
         var address = f.stack.pop();
         var bigPart = f.stack.pop() >>> 0;
         var smallPart = f.stack.pop() >>> 0;
-        var value = new Long(smallPart, bigPart);
         var unconverted = length;
 
         for (var i = 0; i < length; i++) {
@@ -1306,12 +1284,14 @@ function Output(f) {
             } else {
                 address++;
                 unconverted--;
-                value = value.mul(base).add(Long.fromInt(next));
+                var temp = (smallPart * base) + next;
+                smallPart = temp % maxUInt;
+                bigPart = (bigPart * base) + Math.floor(temp / maxUInt);
             }
         }
 
-        f.stack.push(value.low);
-        f.stack.push(value.high);
+        f.stack.push(smallPart);
+        f.stack.push(bigPart);
         f.stack.push(address);
         f.stack.push(unconverted);
     });
@@ -1320,7 +1300,7 @@ function Output(f) {
 }
 
 module.exports = Output;
-},{"long":15}],13:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 function StackOperations(f) {
     f.defjs("drop", function drop() {
         f.stack.pop();

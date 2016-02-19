@@ -1,3 +1,5 @@
+var Long = require("long")
+
 function Output(f) {
 
     f._output = "";
@@ -106,11 +108,12 @@ function Output(f) {
     });
 
     f.defjs(">number", function toNumber() {
-        var base = f._base();
+        var base = Long.fromInt(f._base());
         var length = f.stack.pop();
         var address = f.stack.pop();
         var bigPart = f.stack.pop() >>> 0;
         var smallPart = f.stack.pop() >>> 0;
+        var value = new Long(smallPart, bigPart);
         var unconverted = length;
 
         for (var i = 0; i < length; i++) {
@@ -121,14 +124,12 @@ function Output(f) {
             } else {
                 address++;
                 unconverted--;
-                var temp = (smallPart * base) + next;
-                smallPart = temp % maxUInt;
-                bigPart = (bigPart * base) + Math.floor(temp / maxUInt);
+                value = value.mul(base).add(Long.fromInt(next));
             }
         }
 
-        f.stack.push(smallPart);
-        f.stack.push(bigPart);
+        f.stack.push(value.low);
+        f.stack.push(value.high);
         f.stack.push(address);
         f.stack.push(unconverted);
     });

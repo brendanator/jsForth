@@ -19,7 +19,7 @@
 \ Compilation: ( "<spaces>name" -- )
 \   Parse name delimited by a space. Find name.
 \   Append the compilation semantics of name to the current definition.
-: postpone 32 word find dup 0 = abort" Word not found" 
+: postpone 32 word find dup 0 = abort" Word not found"
     0 > if
         compile,
     else
@@ -87,18 +87,11 @@
 : 1+ 1 + ;
 : 1- 1 - ;
 
-32 2 js /Math.pow{2} constant max-uint
-: floor js /Math.floor{1} ;
-: / / floor ;
 : */ -rot * swap / ;
 : /mod 2dup mod -rot / ;
-: */mod rot * swap /mod ;
-: s>d max-uint /mod ; \ convert single to double
-: m* * s>d ; \ multiply 2 singles into a double
 : unsigned 0 rshift ;
 : u< unsigned swap unsigned > ;
 : u> unsigned swap unsigned < ;
-: um* unsigned swap unsigned * s>d ;
 
 : u. ( u -- ) unsigned . ;
 
