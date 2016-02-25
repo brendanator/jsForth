@@ -9,14 +9,14 @@ function Header(link, name, immediate, hidden, executionToken) {
 function Definitions(f) {
 
     // Temporary definition until latest is defined as a variable
-    function latest() {
+    var latest = function latest() {
         return null;
     };
 
     function defheader(name, immediate, hidden) {
         f.dataSpace.push(new Header(latest(), name, immediate, hidden, f.dataSpace.length + 1));
         latest(f.dataSpace.length - 1);
-    };
+    }
 
     f.defjs = function defjs(name, fn, immediate, displayName) {
         defheader(displayName || name, immediate);
@@ -71,7 +71,7 @@ function Definitions(f) {
         while (current !== null) {
             var wordDefinition = f.dataSpace[current];
             // Case insensitive
-            if (wordDefinition.name.toLowerCase() == word.toLowerCase() && !wordDefinition.hidden)
+            if (wordDefinition.name && wordDefinition.name.toLowerCase() == word.toLowerCase() && !wordDefinition.hidden)
                 return wordDefinition;
             current = wordDefinition.link;
         }
@@ -86,7 +86,7 @@ function Definitions(f) {
     });
 
     f.defjs(":noname", function noname() {
-        defheader("", false, true);
+        defheader(null, false, true);
         f.stack.push(f.dataSpace.length);
         f.compileEnter("_noname_");
         f.compiling(true);
@@ -103,9 +103,10 @@ function Definitions(f) {
     }, true); // Immediate
 
     f.defjs("find", function find() {
-        var word = f.stack.pop();
-        if (typeof word === "number") {
-            var startPosition = word;
+        var input = f.stack.pop();
+        var word = input;
+        if (typeof input === "number") {
+            var startPosition = input;
             var length = f._getAddress(startPosition);
             word = "";
             for (var i = 1; i <= length; i++) {
@@ -117,7 +118,7 @@ function Definitions(f) {
             f.stack.push(definition.executionToken);
             f.stack.push(definition.immediate ? 1 : -1);
         } else {
-            f.stack.push(word);
+            f.stack.push(input);
             f.stack.push(0);
         }
     });
@@ -157,8 +158,8 @@ function Definitions(f) {
 
     f.defjs("immediate", function immediate() {
         var wordDefinition = f.dataSpace[latest()];
-        wordDefinition.immediate = !wordDefinition.immediate;
-    }, true); // Immediate
+        wordDefinition.immediate = true;
+    });
 
     f.defjs("hidden", function hidden() {
         var wordDefinition = f.dataSpace[f.stack.pop()];
@@ -179,7 +180,7 @@ function Definitions(f) {
         f.dataSpace.push(f.findDefinition(f._readWord()).executionToken);
     }, true);
 
-    f._latest = latest
+    f._latest = latest;
     f._lit = _lit;
     return f;
 }

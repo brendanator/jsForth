@@ -1,4 +1,4 @@
-var Long = require("long")
+var Long = require("long");
 
 function Output(f) {
 

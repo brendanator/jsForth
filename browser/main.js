@@ -3,13 +3,15 @@ var Forth = require("../kernel/forth.js");
 function Repl() {
     "use strict";
 
-    var forth = Forth();
+    var forth = Forth(function(output) {
+        createOutputNode("\u2190", output, "forth-output");
+    });
 
     function loadForth(file) {
         var xmlhttp = new XMLHttpRequest();
         xmlhttp.onreadystatechange = function() {
             if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
-                console.log(forth.run(xmlhttp.responseText));
+                forth.run(xmlhttp.responseText);
                 showStack();
             }
         };
@@ -80,9 +82,6 @@ function Repl() {
 
             try {
                 var output = forth.run(input);
-                if (output) {
-                    createOutputNode("\u2190", output, "forth-output");
-                }
             } catch (err) {
                 createOutputNode("X", err, "error");
                 throw err;

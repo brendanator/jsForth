@@ -1,14 +1,15 @@
 #! /usr/bin/env node
 
-var Forth = require("../kernel/forth.js")
+var Forth = require("../kernel/forth.js");
 var fs = require("fs");
 
-var forth = new Forth();
-fs.readFile("./forth/forth.fth", function(err, data) {
-    fs.readFile("./test/ans-forth-tests.fth", function(err, tests) {
-        console.log(forth.run(data.toString()));
-        console.log(forth.run(tests.toString()));
-        console.log(forth.run("some magic input!"));
-        process.exit();
+var forth = new Forth(function(output) {
+    console.log(output);
+});
+
+fs.readFile(__dirname + "/../forth/forth.fth", "utf8", function(err, data) {
+    fs.readFile(__dirname + "/runtests.fth", "utf8", function(err, tests) {
+        forth.run(data);
+        forth.run(tests);
     });
 });

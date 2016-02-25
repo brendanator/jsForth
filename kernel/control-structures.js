@@ -29,15 +29,33 @@ function ControlStructures(f) {
 
     function plusLoop() {
         var step = f.stack.pop();
-        var index = f.returnStack.pop();
-        var limit = f.returnStack.pop();
-        if (index < limit && index + step < limit || index >= limit && index + step >= limit) {
-            f.returnStack.push(limit);
-            f.returnStack.push(index + step);
-            f.instructionPointer += f.dataSpace[f.instructionPointer];
+        var index = f.returnStack.pop() | 0;
+        var limit = f.returnStack.pop() | 0;
+
+        var exitLoop;
+        if (step > 0) {
+            if (index > limit) { // Overflow, so do unsigned
+                limit = limit >>> 0;
+                index = index >>> 0;
+            }
+            exitLoop = index < limit && index + step >= limit;
+        } else if (step < 0) {
+            if (index < limit) {
+                index = index >>> 0;
+                limit = limit >>> 0;
+            }
+            exitLoop = index >= limit && index + step < limit;
         } else {
+            exitLoop = false;
+        }
+
+        if (exitLoop) {
             f.returnStack.pop();
             f.instructionPointer++;
+        } else {
+            f.returnStack.push(limit | 0);
+            f.returnStack.push(index + step | 0);
+            f.instructionPointer += f.dataSpace[f.instructionPointer];
         }
     }
 

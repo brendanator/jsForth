@@ -1,4 +1,4 @@
-var Input = require("./input.js");
+var InputExceptions = require("./input-exceptions.js");
 
 function Interpreter(f) {
     function run(input) {
@@ -6,9 +6,9 @@ function Interpreter(f) {
         f._output = "";
 
         try {
-            runInterpreter()
+            runInterpreter();
         } catch (err) {
-            if (err !== Input.EndOfInput) {
+            if (err !== InputExceptions.WaitingOnInput) {
                 console.error("Exception " + err + " at:\n" + printStackTrace());
                 console.error(f._currentInput.inputBuffer());
                 console.error(f._output);
@@ -17,16 +17,27 @@ function Interpreter(f) {
                 throw err;
             }
         }
-        return f._output;
+        f.outputCallback(f._output);
     }
 
     function runInterpreter() {
-        // As js doesn't support tail call optimisation the
-        // run function uses a trampoline to execute forth code
-        while (true) {
-            f.currentInstruction();
-            f.currentInstruction = f.dataSpace[f.instructionPointer++];
-        }        
+        // Run while there is still input to consume 
+        while (f._currentInput) {
+            try {
+                // As js doesn't support tail call optimisation the
+                // run function uses a trampoline to execute forth code
+                while (true) {
+                    f.currentInstruction();
+                    f.currentInstruction = f.dataSpace[f.instructionPointer++];
+                }
+            } catch (err) {
+                if (err === InputExceptions.EndOfInput) {
+                    f._popInput();
+                } else {
+                    throw err;
+                }
+            }
+        }
     }
 
     function printStackTrace() {
@@ -38,25 +49,11 @@ function Interpreter(f) {
         return stackTrace;
     }
 
-    f.defjs("evaluate", function evaluate() {
+    f._evaluate = f.defjs("evaluate", function evaluate() {
         var length = f.stack.pop();
         var position = f.stack.pop() - f._INPUT_SOURCE;
         f._subInput(position, length);
-
-        var savedInstructionPointer = f.instructionPointer;
-
-        f.currentInstruction = interpret;
-
-        try {
-            runInterpreter();
-        } catch (err) {
-            if (err == Input.EndOfInput) {
-                f._popInput();
-                f.instructionPointer = savedInstructionPointer;
-            } else {
-                throw err;
-            }
-        }
+        f.instructionPointer = interpretInstruction;
     });
 
     function interpretWord() {
@@ -82,7 +79,7 @@ function Interpreter(f) {
     }
 
     var interpretInstruction = f.dataSpace.length + 1;
-    var interpret = f.defjs("interpret", function interpret() {
+    f.defjs("interpret", function interpret() {
         f.instructionPointer = interpretInstruction; // Loop after interpret word is called
         interpretWord();
     });

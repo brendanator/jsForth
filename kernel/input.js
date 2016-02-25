@@ -1,4 +1,4 @@
-var EndOfInput = (function() {})();
+var InputExceptions = require("./input-exceptions.js");
 
 function InputWindow(input, startPosition, endPosition, toIn) {
     var inputBufferPosition = startPosition;
@@ -18,7 +18,7 @@ function InputWindow(input, startPosition, endPosition, toIn) {
 
     function readKey() {
         if (toIn() > inputBufferLength) {
-            if (!refill()) throw EndOfInput;
+            if (!refill()) throw InputExceptions.EndOfInput;
         }
 
         var keyPosition = inputBufferPosition + toIn();
@@ -52,16 +52,16 @@ function InputWindow(input, startPosition, endPosition, toIn) {
         if (toIn() >= inputBufferLength) {
             refill();
         }
-        delimiter = delimiter || /\s/;
+        delimiter = delimiter || " ";
 
         var word = "";
         var key = readKey();
 
         // Skip leading delimiters
-        while (key.match(delimiter))
+        while (key === delimiter || key === "\n")
             key = readKey();
 
-        while (!key.match(delimiter) && toIn() <= inputBufferLength) {
+        while (key !== delimiter && toIn() <= inputBufferLength) {
             word += key;
             key = readKey();
         }
@@ -128,17 +128,17 @@ function Input(f) {
 
     function readWord(delimiter) {
         return f._currentInput.readWord(delimiter);
-    };
+    }
 
     var wordBufferStart = f.dataSpace.length;
-    f.dataSpace.length += 32;
+    f.dataSpace.length += 128;
     f.defjs("word", function word() {
         var delimiter = f.stack.pop();
         if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
         f.stack.push(wordBufferStart);
 
         var word = readWord(delimiter);
-        var length = Math.min(word.length, 31);
+        var length = Math.min(word.length, 127);
         f.dataSpace[wordBufferStart] = length;
         for (var i = 0; i < length; i++) {
             f.dataSpace[wordBufferStart + i + 1] = word.charCodeAt(i);
@@ -150,8 +150,6 @@ function Input(f) {
     });
 
     f.defjs("accept", function accept() {
-        var savedInput = f._currentInput;
-        var savedToIn = toIn();
 
         var maxLength = f.stack.pop();
         var address = f.stack.pop();
@@ -164,11 +162,10 @@ function Input(f) {
                 f._setAddress(address + i, received[i]);
             }
 
-            f._currentInput = savedInput;
-            toIn(savedToIn);
+            popInput();
         };
 
-        throw Input.EndOfInput;
+        throw InputExceptions.WaitingOnInput;
     });
 
     function _parseInt(string, base) {
@@ -190,7 +187,21 @@ function Input(f) {
 
     // Parse a float in the provide base
     function _parseFloat(string) {
-        var base = f._base();
+        var base;
+        if (string[0] === "'" && string.length === 3 && string[2] == "'") {
+            return string.charCodeAt(1);
+        } else if (string[0] === "#") {
+            string = string.substring(1);
+            base = 10;
+        } else if (string[0] === "$") {
+            string = string.substring(1);
+            base = 16;
+        } else if (string[0] === "%") {
+            string = string.substring(1);
+            base = 2;
+        } else {
+            base = f._base();
+        }
 
         //split the string at the decimal point
         string = string.split(/\./);
@@ -219,6 +230,7 @@ function Input(f) {
     var inputString = "";
 
     function newInput(input) {
+        saveCurrentInput();
         var startPosition = inputString.length;
         inputString += input;
         f._currentInput = InputWindow(inputString, startPosition, inputString.length, toIn);
@@ -227,27 +239,40 @@ function Input(f) {
     var inputStack = [];
 
     function subInput(position, length) {
-        inputStack.push({
-            input: f._currentInput,
-            toIn: toIn()
-        });
+        saveCurrentInput();
         f._currentInput = f._currentInput.subInput(position, length);
+    }
+
+    function saveCurrentInput() {
+        if (f._currentInput) {
+            inputStack.push({
+                input: f._currentInput,
+                toIn: toIn(),
+                instructionPointer: f.instructionPointer
+            });
+        }
     }
 
     function popInput() {
         var savedInput = inputStack.pop();
-        f._currentInput = savedInput.input;
-        toIn(savedInput.toIn);
+        if (savedInput) {
+            f._currentInput = savedInput.input;
+            toIn(savedInput.toIn);
+            f.instructionPointer = savedInput.instructionPointer;
+            f.currentInstruction = f.dataSpace[f.instructionPointer++];
+        } else {
+            f._currentInput = null;
+        }
     }
 
     f._readWord = readWord;
     f._newInput = newInput;
     f._subInput = subInput;
     f._popInput = popInput;
+    f._inputStack = inputStack;
     f._parseFloat = _parseFloat;
     f._INPUT_SOURCE = INPUT_SOURCE;
     return f;
 }
 
 module.exports = Input;
-module.EndOfInput = EndOfInput;

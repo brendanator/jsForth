@@ -1,4 +1,4 @@
-var Long = require("long")
+var Long = require("long");
 
 function NumericOperations(f) {
     f.defjs("+", function plus() {
@@ -38,7 +38,7 @@ function NumericOperations(f) {
     f.defjs("s>d", function singleToDouble() {
         var value = Long.fromInt(f.stack.pop());
         f.stack.push(value.low);
-        f.stack.push(value.high);        
+        f.stack.push(value.high);
     });
 
     f.defjs("m*", function() {

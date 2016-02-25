@@ -1,10 +1,10 @@
 function ComparisonOperations(f) {
     f.defjs("true", function _true() {
-        f.stack.push(true);
+        f.stack.push(-1);
     });
 
     f.defjs("false", function _false() {
-        f.stack.push(false);
+        f.stack.push(0);
     });
 
     f.defjs("and", function and() {
@@ -28,32 +28,32 @@ function ComparisonOperations(f) {
 
     f.defjs("=", function equal() {
         var first = f.stack.pop();
-        f.stack.push(f.stack.pop() == first);
+        f.stack.push((f.stack.pop() == first) ? -1 : 0);
     });
 
     f.defjs("<>", function notEqual() {
         var first = f.stack.pop();
-        f.stack.push(f.stack.pop() != first);
+        f.stack.push((f.stack.pop() != first) ? -1 : 0);
     });
 
     f.defjs("<", function lessThan() {
         var first = f.stack.pop();
-        f.stack.push(f.stack.pop() < first);
+        f.stack.push((f.stack.pop() < first) ? -1 : 0);
     });
 
     f.defjs(">", function greaterThan() {
         var first = f.stack.pop();
-        f.stack.push(f.stack.pop() > first);
+        f.stack.push((f.stack.pop() > first) ? -1 : 0);
     });
 
     f.defjs("<=", function lessThanEqual() {
         var first = f.stack.pop();
-        f.stack.push(f.stack.pop() <= first);
+        f.stack.push((f.stack.pop() <= first) ? -1 : 0);
     });
 
     f.defjs(">=", function greaterThanEqual() {
         var first = f.stack.pop();
-        f.stack.push(f.stack.pop() >= first);
+        f.stack.push((f.stack.pop() >= first) ? -1 : 0);
     });
 
     return f;

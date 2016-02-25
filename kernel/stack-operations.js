@@ -18,6 +18,10 @@ function StackOperations(f) {
         f.stack.push(f.stack.peek(2));
     });
 
+    f.defjs("pick", function pick() {
+        f.stack.push(f.stack.peek(f.stack.pop()));
+    });
+
     f.defjs("rot", function rot() {
         var first = f.stack.pop();
         var second = f.stack.pop();
@@ -34,6 +38,11 @@ function StackOperations(f) {
         f.stack.push(first);
         f.stack.push(third);
         f.stack.push(second);
+    });
+
+    f.defjs("roll", function roll() {
+        var num = f.stack.pop();
+        f.stack.roll(num);
     });
 
     f.defjs("2drop", function twoDrop() {

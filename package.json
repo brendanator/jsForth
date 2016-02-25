@@ -1,5 +1,5 @@
 {
-  "name": "jsForth",
+  "name": "js-forth",
   "version": "0.1.0",
   "author": "brendanator",
   "main": "kernel/forth.js",
@@ -23,7 +23,8 @@
     "start": "python -m SimpleHTTPServer"
   },
   "dependencies": {
-    "long": "^3.0.3"
+    "long": "^3.0.3",
+    "request": "^2.69.0"
   },
   "devDependencies": {
     "browserify": "latest",
