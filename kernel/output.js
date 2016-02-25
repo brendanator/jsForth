@@ -43,8 +43,6 @@ function Output(f) {
     });
 
     // Numeric output
-    var maxUInt = Math.pow(2, 32);
-
     var numericOutputStart = f.dataSpace.length;
     var numericOutput = "";
     f.dataSpace.length += 128;
@@ -76,28 +74,28 @@ function Output(f) {
     });
 
     f.defjs("#", function writeNextNumericOutput() {
-        var bigPart = f.stack.pop() >>> 0;
-        var smallPart = f.stack.pop() >>> 0;
-        var base = f._base();
+        var bigPart = f.stack.pop();
+        var smallPart = f.stack.pop();
+        var value = new Long(smallPart, bigPart, true);
+        var base = Long.fromInt(f._base());
 
-        numericOutput += Math.floor(smallPart % base).toString(base).toUpperCase();
+        numericOutput += value.mod(base).toString(base).toUpperCase();
+        value = value.div(base);
 
-        smallPart = (bigPart % base) * Math.floor(maxUInt / base) + Math.floor(smallPart / base);
-        bigPart = Math.floor(bigPart / base);
-        f.stack.push(smallPart);
-        f.stack.push(bigPart);
+        f.stack.push(value.smallPart);
+        f.stack.push(value.bigPart);
     });
 
     f.defjs("#S", function writeAllNumericOutput() {
-        var bigPart = f.stack.pop() >>> 0;
-        var smallPart = f.stack.pop() >>> 0;
-        var base = f._base();
+        var bigPart = f.stack.pop();
+        var smallPart = f.stack.pop();
+        var value = new Long(smallPart, bigPart, true);
+        var base = Long.fromInt(f._base());
 
-        if (smallPart > 0 || bigPart > 0) {
-            while (smallPart > 0 || bigPart > 0) {
-                numericOutput += Math.floor(smallPart % base).toString(base).toUpperCase();
-                smallPart = (bigPart % base) * Math.floor(maxUInt / base) + Math.floor(smallPart / base);
-                bigPart = Math.floor(bigPart / base);
+        if (value.compare(Long.ZERO)) {
+            while (value.compare(Long.ZERO)) {
+                numericOutput += value.mod(base).toString(base).toUpperCase();
+                value = value.div(base);
             }
         } else {
             numericOutput += "0";
@@ -111,9 +109,9 @@ function Output(f) {
         var base = Long.fromInt(f._base());
         var length = f.stack.pop();
         var address = f.stack.pop();
-        var bigPart = f.stack.pop() >>> 0;
-        var smallPart = f.stack.pop() >>> 0;
-        var value = new Long(smallPart, bigPart);
+        var bigPart = f.stack.pop();
+        var smallPart = f.stack.pop();
+        var value = new Long(smallPart, bigPart, true);
         var unconverted = length;
 
         for (var i = 0; i < length; i++) {
