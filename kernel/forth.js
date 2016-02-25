@@ -11,10 +11,8 @@ var Output = require("./output.js");
 var Include = require("./include.js");
 var Interpreter = require("./interpreter.js");
 
-function Forth(outputCallback) {
-    var forth = {
-        outputCallback: outputCallback
-    };
+function Forth() {
+    var forth = {};
 
     Data(forth);
     Definitions(forth);

@@ -3,25 +3,19 @@
 var Forth = require("../kernel/forth.js");
 
 function Repl() {
-    "use strict";
-
-    var forth = Forth(function(output) {
-        createOutputNode("\u2190", output, "forth-output");
-    });
+    var forth = Forth();
 
     function loadForth(file) {
         var xmlhttp = new XMLHttpRequest();
         xmlhttp.onreadystatechange = function() {
             if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
-                forth.run(xmlhttp.responseText);
-                showStack();
+                forth.run(xmlhttp.responseText, onForthOutput);
             }
         };
         xmlhttp.open("GET", file, true);
         xmlhttp.send();
     }
     loadForth("forth/forth.fth");
-    // loadForth("test/ans-forth-tests.fth");
 
     var inputHistory = [""];
     var historyCount = 0;
@@ -55,24 +49,33 @@ function Repl() {
         inputHistory.push("");
     }
 
-    function createOutputNode(icon, text, className) {
-        var outputNode = document.createElement("div");
+    function createReplNode(icon, text, className) {
+        if (!text) return;
 
         var textNode = document.createElement("textarea");
         textNode.className = className;
         textNode.readOnly = true;
         textNode.cols = 80;
-        text = icon + " " + text;
-        // Roughly guess the number of rows by assuming lines wrap every 80 characters
-        textNode.rows = text.split("\n").map(function(l) {
-            return (l.length / 80) + 1;
-        }).reduce(function(p, c) {
-            return p + c;
-        }, 0);
-        textNode.value = text;
-        outputNode.appendChild(textNode);
+        textNode.value = icon + " " + text;
 
-        document.getElementById("output").appendChild(outputNode);
+        var replNode = document.createElement("div");
+        replNode.appendChild(textNode);
+
+        var outputNode = document.getElementById("output");
+        outputNode.appendChild(replNode);
+
+        setTimeout(function() {
+            textNode.style.height = textNode.scrollHeight + "px";
+            outputNode.scrollTop = outputNode.scrollHeight - outputNode.clientHeight;
+        }, 0);
+    }
+
+    function onForthOutput(error, output) {
+        createReplNode("\u2190", output, "forth-output");
+        if (error) {
+            createReplNode("X", error, "error");
+        }
+        showStack();
     }
 
     function runforth() {
@@ -80,19 +83,9 @@ function Repl() {
         var input = inputNode.value.trim();
         if (input) {
             updateHistory(input);
-            createOutputNode("\u2192", input, "user-output");
-
-            try {
-                var output = forth.run(input);
-            } catch (err) {
-                createOutputNode("X", err, "error");
-                throw err;
-            } finally {
-                showStack();
-                inputNode.value = "";
-                var outputNode = document.getElementById("output");
-                outputNode.scrollTop = outputNode.scrollHeight;
-            }
+            createReplNode("\u2192", input, "user-output");
+            inputNode.value = "";
+            forth.run(input, onForthOutput);
         }
     }
 
@@ -528,10 +521,8 @@ var Output = require("./output.js");
 var Include = require("./include.js");
 var Interpreter = require("./interpreter.js");
 
-function Forth(outputCallback) {
-    var forth = {
-        outputCallback: outputCallback
-    };
+function Forth() {
+    var forth = {};
 
     Data(forth);
     Definitions(forth);
@@ -559,12 +550,14 @@ var InputExceptions = require("./input-exceptions.js");
 
 function Include(f) {
     f.defjs("include", function() {
+        var outputCallback = f.outputCallback;
+
         var file = f._readWord();
         if (process.browser || file.match(/^http/)) {
             if (process.browser) file = url.resolve(location.href, file);
             request.get(file, function(error, response, body) {
                 if (!error && response.statusCode == 200) {
-                    f.run(body);
+                    f.run(body, outputCallback);
                 } else {
                     console.error("Failed to load http file " + file + ". " + error);
                 }
@@ -572,7 +565,7 @@ function Include(f) {
         } else {
             fs.readFile(file, "utf8", function(error, body) {
                 if (!error) {
-                    f.run(body);
+                    f.run(body, outputCallback);
                 } else {
                     console.error("Failed to load file " + file + ". " + error);
                 }
@@ -875,7 +868,9 @@ module.exports = Input;
 var InputExceptions = require("./input-exceptions.js");
 
 function Interpreter(f) {
-    function run(input) {
+    function run(input, outputCallback) {
+        f.outputCallback = outputCallback;
+
         f._newInput(input);
         f._output = "";
 
@@ -888,10 +883,13 @@ function Interpreter(f) {
                 console.error(f._output);
                 f.currentInstruction = quit;
                 f.stack.clear();
+                outputCallback(err, f._output);
                 throw err;
             }
         }
-        f.outputCallback(f._output);
+
+        if (f._output)
+            outputCallback(null, f._output);
     }
 
     function runInterpreter() {

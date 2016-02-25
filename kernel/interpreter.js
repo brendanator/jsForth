@@ -1,7 +1,9 @@
 var InputExceptions = require("./input-exceptions.js");
 
 function Interpreter(f) {
-    function run(input) {
+    function run(input, outputCallback) {
+        f.outputCallback = outputCallback;
+
         f._newInput(input);
         f._output = "";
 
@@ -14,10 +16,13 @@ function Interpreter(f) {
                 console.error(f._output);
                 f.currentInstruction = quit;
                 f.stack.clear();
+                outputCallback(err, f._output);
                 throw err;
             }
         }
-        f.outputCallback(f._output);
+
+        if (f._output)
+            outputCallback(null, f._output);
     }
 
     function runInterpreter() {
