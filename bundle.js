@@ -756,63 +756,59 @@ function Input(f) {
         throw InputExceptions.WaitingOnInput;
     });
 
-    function _parseInt(string, base) {
+    // returns NaN if any characters are invalid in base
+    function parseIntStrict(num, base) {
         var int = 0;
-        if (string[0] !== "-") { // Positive
-            for (var i = 0; i < string.length; i++) {
+        if (num[0] !== "-") { // Positive
+            for (var i = 0; i < num.length; i++) {
                 int *= base;
-                int += parseInt(string[i], base);
+                int += parseInt(num[i], base);
             }
             return int;
         } else {
-            for (var j = 1; j < string.length; j++) {
+            for (var j = 1; j < num.length; j++) {
                 int *= base;
-                int -= parseInt(string[j], base);
+                int -= parseInt(num[j], base);
             }
             return int;
         }
     }
 
-    // Parse a float in the provide base
-    function _parseFloat(string) {
+    // Parse a float in the current base
+    function _parseFloatInBase(string) {
         var base;
-        if (string[0] === "'" && string.length === 3 && string[2] == "'") {
+        if (string[0] === "'" && string.length === 3 && string[2] == "'") { // 'a'
             return string.charCodeAt(1);
-        } else if (string[0] === "#") {
+        } else if (string[0] === "#") { // decimal - #1234567890
             string = string.substring(1);
             base = 10;
-        } else if (string[0] === "$") {
+        } else if (string[0] === "$") { // hex - $ff00ff
             string = string.substring(1);
             base = 16;
-        } else if (string[0] === "%") {
+        } else if (string[0] === "%") { // binary - %10110110
             string = string.substring(1);
             base = 2;
         } else {
             base = f._base();
         }
 
-        //split the string at the decimal point
-        string = string.split(/\./);
+        var num = string.split(/\./);
 
-        //if there is nothing before the decimal point, make it 0
-        if (string[0] === '') {
-            string[0] = "0";
+        var integerPart = 0;
+        if (num[0] !== '') {
+            integerPart = parseIntStrict(num[0], base);
         }
 
-        //if there was a decimal point & something after it
-        if (string.length > 1 && string[1] !== '') {
-            var fractionLength = string[1].length;
-            string[1] = _parseInt(string[1], base);
-            string[1] *= Math.pow(base, -fractionLength);
-            var int = _parseInt(string[0], base);
-            if (int >= 0)
-                return int + string[1];
-            else
-                return int - string[1];
+        var fractionalPart = 0;
+        if (num.length > 1 && num[1] !== '') {
+            fractionalPart = parseIntStrict(num[1], base) * Math.pow(base, -num[1].length);
         }
 
-        //if there wasn't a decimal point or there was but nothing was after it
-        return _parseInt(string[0], base);
+        if (integerPart >= 0) {
+            return integerPart + fractionalPart;
+        } else {
+            return integerPart - fractionalPart;
+        }
     }
 
     var inputString = "";
@@ -857,8 +853,7 @@ function Input(f) {
     f._newInput = newInput;
     f._subInput = subInput;
     f._popInput = popInput;
-    f._inputStack = inputStack;
-    f._parseFloat = _parseFloat;
+    f._parseFloatInBase = _parseFloatInBase;
     f._INPUT_SOURCE = INPUT_SOURCE;
     return f;
 }
@@ -888,8 +883,7 @@ function Interpreter(f) {
             }
         }
 
-        if (f._output)
-            outputCallback(null, f._output);
+        outputCallback(null, f._output);
     }
 
     function runInterpreter() {
@@ -939,7 +933,7 @@ function Interpreter(f) {
                 f.dataSpace.push(f.dataSpace[definition.executionToken]);
             }
         } else {
-            var num = f._parseFloat(word);
+            var num = f._parseFloatInBase(word);
             if (isNaN(num)) throw "Word not defined: " + word;
             if (f.compiling()) {
                 f.dataSpace.push(f._lit);

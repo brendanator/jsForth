@@ -21,8 +21,7 @@ function Interpreter(f) {
             }
         }
 
-        if (f._output)
-            outputCallback(null, f._output);
+        outputCallback(null, f._output);
     }
 
     function runInterpreter() {
@@ -72,7 +71,7 @@ function Interpreter(f) {
                 f.dataSpace.push(f.dataSpace[definition.executionToken]);
             }
         } else {
-            var num = f._parseFloat(word);
+            var num = f._parseFloatInBase(word);
             if (isNaN(num)) throw "Word not defined: " + word;
             if (f.compiling()) {
                 f.dataSpace.push(f._lit);
