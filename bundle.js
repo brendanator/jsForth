@@ -605,56 +605,38 @@ function InputWindow(input, startPosition, endPosition, toIn) {
     }
 
     function readKey() {
-        if (toIn() > inputBufferLength) {
-            if (!refill()) throw InputExceptions.EndOfInput;
-        }
-
         var keyPosition = inputBufferPosition + toIn();
-        toIn(toIn() + 1);
         if (keyPosition < endPosition) {
+            toIn(toIn() + 1);
             return input.charAt(keyPosition);
         } else {
-            return " ";
+            return null;
         }
     }
 
-    function parse(delimiter) {
-        if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
-        var address = inputBufferPosition + toIn();
-        var length = 0;
-        var result = "";
-        if (toIn() <= inputBufferLength) {
-            var key = readKey();
-            while (key !== delimiter) {
-                length++;
-                result += key;
-                key = readKey();
+    function parse(delimiter, skipLeading) {
+        delimiter = delimiter || " ".charCodeAt(0);
+        var inputBuf = inputBuffer();
+
+        var startPosition = toIn();
+        if (skipLeading) {
+            while (inputBuf.charCodeAt(startPosition) === delimiter && startPosition < inputBuf.length) {
+                startPosition++;
             }
-        } else {
-            refill();
         }
-        return [address, length, result];
+
+        var endPosition = startPosition + 1;
+        while (inputBuf.charCodeAt(endPosition) !== delimiter && endPosition < inputBuf.length) {
+            endPosition++;
+        }
+
+        toIn(endPosition + 1);
+        var result = inputBuf.substring(startPosition, endPosition);
+        return [inputBufferPosition + startPosition, result.length, result];
     }
 
     function readWord(delimiter) {
-        if (toIn() >= inputBufferLength) {
-            refill();
-        }
-        delimiter = delimiter || " ";
-
-        var word = "";
-        var key = readKey();
-
-        // Skip leading delimiters
-        while (key === delimiter || key === "\n")
-            key = readKey();
-
-        while (key !== delimiter && toIn() <= inputBufferLength) {
-            word += key;
-            key = readKey();
-        }
-
-        return word;
+        return parse(delimiter, true)[2];
     }
 
     function source() {
@@ -722,15 +704,14 @@ function Input(f) {
     f.dataSpace.length += 128;
     f.defjs("word", function word() {
         var delimiter = f.stack.pop();
-        if (typeof delimiter === "number") delimiter = String.fromCharCode(delimiter);
-        f.stack.push(wordBufferStart);
-
         var word = readWord(delimiter);
         var length = Math.min(word.length, 127);
         f.dataSpace[wordBufferStart] = length;
         for (var i = 0; i < length; i++) {
             f.dataSpace[wordBufferStart + i + 1] = word.charCodeAt(i);
         }
+
+        f.stack.push(wordBufferStart);
     });
 
     f.defjs("char", function char() {
@@ -924,6 +905,11 @@ function Interpreter(f) {
 
     function interpretWord() {
         var word = f._readWord();
+        while (!word) {
+            if (!f._currentInput.refill()) throw InputExceptions.EndOfInput;
+            word = f._readWord();
+        }
+
         var definition = f.findDefinition(word);
         if (definition) {
             if (!f.compiling() || definition.immediate) {
@@ -962,7 +948,7 @@ function Interpreter(f) {
     });
 
     f.defjs('abort"', function abortQuote() {
-        var error = f._currentInput.parse('"')[2];
+        var error = f._currentInput.parse('"'.charCodeAt(0))[2];
         f.dataSpace.push(function abortQuote() {
             if (f.stack.pop())
                 abort(error);
@@ -1303,8 +1289,6 @@ function Output(f) {
     });
 
     // Numeric output
-    var maxUInt = Math.pow(2, 32);
-
     var numericOutputStart = f.dataSpace.length;
     var numericOutput = "";
     f.dataSpace.length += 128;
@@ -1336,28 +1320,28 @@ function Output(f) {
     });
 
     f.defjs("#", function writeNextNumericOutput() {
-        var bigPart = f.stack.pop() >>> 0;
-        var smallPart = f.stack.pop() >>> 0;
-        var base = f._base();
+        var bigPart = f.stack.pop();
+        var smallPart = f.stack.pop();
+        var value = new Long(smallPart, bigPart, true);
+        var base = Long.fromInt(f._base());
 
-        numericOutput += Math.floor(smallPart % base).toString(base).toUpperCase();
+        numericOutput += value.mod(base).toString(base).toUpperCase();
+        value = value.div(base);
 
-        smallPart = (bigPart % base) * Math.floor(maxUInt / base) + Math.floor(smallPart / base);
-        bigPart = Math.floor(bigPart / base);
-        f.stack.push(smallPart);
-        f.stack.push(bigPart);
+        f.stack.push(value.smallPart);
+        f.stack.push(value.bigPart);
     });
 
     f.defjs("#S", function writeAllNumericOutput() {
-        var bigPart = f.stack.pop() >>> 0;
-        var smallPart = f.stack.pop() >>> 0;
-        var base = f._base();
+        var bigPart = f.stack.pop();
+        var smallPart = f.stack.pop();
+        var value = new Long(smallPart, bigPart, true);
+        var base = Long.fromInt(f._base());
 
-        if (smallPart > 0 || bigPart > 0) {
-            while (smallPart > 0 || bigPart > 0) {
-                numericOutput += Math.floor(smallPart % base).toString(base).toUpperCase();
-                smallPart = (bigPart % base) * Math.floor(maxUInt / base) + Math.floor(smallPart / base);
-                bigPart = Math.floor(bigPart / base);
+        if (value.compare(Long.ZERO)) {
+            while (value.compare(Long.ZERO)) {
+                numericOutput += value.mod(base).toString(base).toUpperCase();
+                value = value.div(base);
             }
         } else {
             numericOutput += "0";
@@ -1371,9 +1355,9 @@ function Output(f) {
         var base = Long.fromInt(f._base());
         var length = f.stack.pop();
         var address = f.stack.pop();
-        var bigPart = f.stack.pop() >>> 0;
-        var smallPart = f.stack.pop() >>> 0;
-        var value = new Long(smallPart, bigPart);
+        var bigPart = f.stack.pop();
+        var smallPart = f.stack.pop();
+        var value = new Long(smallPart, bigPart, true);
         var unconverted = length;
 
         for (var i = 0; i < length; i++) {

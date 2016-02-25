@@ -62,6 +62,11 @@ function Interpreter(f) {
 
     function interpretWord() {
         var word = f._readWord();
+        while (!word) {
+            if (!f._currentInput.refill()) throw InputExceptions.EndOfInput;
+            word = f._readWord();
+        }
+
         var definition = f.findDefinition(word);
         if (definition) {
             if (!f.compiling() || definition.immediate) {
@@ -100,7 +105,7 @@ function Interpreter(f) {
     });
 
     f.defjs('abort"', function abortQuote() {
-        var error = f._currentInput.parse('"')[2];
+        var error = f._currentInput.parse('"'.charCodeAt(0))[2];
         f.dataSpace.push(function abortQuote() {
             if (f.stack.pop())
                 abort(error);

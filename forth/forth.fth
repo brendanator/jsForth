@@ -1,10 +1,10 @@
-: \ 10 word drop ; immediate \ Single line comments
+: \ #10 parse 2drop ; immediate \ Single line comments
 
 \ Built in numeric radices
-: binary 2 base ! ;
-: octal 8 base ! ;
-: decimal 10 base ! ;
-: hex 16 base ! ;
+: binary #2 base ! ;
+: octal #8 base ! ;
+: decimal #10 base ! ;
+: hex #16 base ! ;
 
 \ Control structures
 : if ['] jumpIfFalse compile, here 0 , ; immediate
@@ -21,10 +21,9 @@
 : (  begin key ')' = until ; immediate
 
 \ Spaces
-: bl ( -- char ) 32 ;
+: bl ( -- char ) #32 ;
 : space ( -- ) bl emit ;
 : spaces ( n -- ) dup 0 > if 0 do bl emit loop else drop then ;
-
 
   \ Compilation: ( "<spaces>name" -- )
   \   Parse name delimited by a space. Find name.
@@ -106,7 +105,7 @@
 : variable ( "<spaces>name" -- )  create cell allot ;
 
 \ String operations
-: -trailing ( c-addr u1 -- c-addr u2 ) 
+: -trailing ( c-addr u1 -- c-addr u2 )
   begin
     2dup + 1- @ bl = over 0> and
   while
@@ -126,7 +125,7 @@
     drop
   else
     2drop
-  then  
+  then
 ;
 
 : cmove ( c-addr1 c-addr2 u -- )
@@ -136,18 +135,18 @@
     loop
   else
     drop
-  then  
+  then
   2drop
 ;
 
 : cmove> ( c-addr1 c-addr2 u -- )
   dup 0 > if
-    0 swap 1 - do 
-      over i + @ over i + ! -1 
+    0 swap 1 - do
+      over i + @ over i + ! -1
     +loop
   else
     drop
-  then  
+  then
   2drop
 ;
 
@@ -172,7 +171,7 @@
 ;
 
 : search ( c-addr1 u1 c-addr2 u2 -- c-addr3 u3 boolean )
-  2over 
+  2over
   begin ( c-addr1 u1 c-addr2 u2 c-addr3 u3 )
     2over 2over drop over compare 0= if \ found string
       2swap 2drop 2swap 2drop true exit
@@ -189,25 +188,27 @@ create pad 1000 allot
 
 
 \ [IF] [THEN] [ELSE] compile directives
-: [ELSE] ( -- ) 
-  1 begin bl word count dup while                    \ level adr len 
-      2dup s" [IF]" compare 0= if                    \ level adr len 
-        2drop 1 +                                    \ level' 
-      else                                           \ level adr len 
-        2dup s" [ELSE]" compare 0= if                \ level adr len 
-          2drop 1- dup if 1+ then                    \ level' 
-        else                                         \ level adr len 
-          s" [THEN]" compare 0= if                   \ level 
-            1-                                       \ level' 
-          then 
-        then 
-      then ?dup 0= if exit then                      \ level' 
-    repeat 2drop                                     \ level 
-  drop 
-; immediate 
+: [ELSE] ( -- )
+  1 begin
+    begin bl word count dup while                    \ level adr len
+      2dup s" [IF]" compare 0= if                    \ level adr len
+        2drop 1 +                                    \ level'
+      else                                           \ level adr len
+        2dup s" [ELSE]" compare 0= if                \ level adr len
+          2drop 1- dup if 1+ then                    \ level'
+        else                                         \ level adr len
+          s" [THEN]" compare 0= if                   \ level
+            1-                                       \ level'
+          then
+        then
+      then ?dup 0= if exit then                      \ level'
+    repeat 2drop                                     \ level
+    refill 0= until
+  drop
+; immediate
 
-: [IF] ( boolean -- ) 
-   0= if postpone [ELSE] then 
+: [IF] ( boolean -- )
+   0= if postpone [ELSE] then
 ; immediate
 
 : [THEN] ( -- ) ; immediate
