@@ -27,6 +27,22 @@ function ControlStructures(f) {
         f.stack.push(f.dataSpace.length - 1);
     }, true); // Immediate
 
+    function questionDo() {
+        if (f.stack.peek(1) !== f.stack.peek(2)) {
+            _do();
+        } else {
+            f.stack.pop();
+            f.stack.pop();
+            f.instructionPointer = f.dataSpace[f.instructionPointer];
+        }
+    }
+
+    f.defjs("?do", function compileQuestionDo() {
+        f.dataSpace.push(questionDo);
+        f.dataSpace.push(0); // Dummy endLoop
+        f.stack.push(f.dataSpace.length - 1);
+    }, true); // Immediate
+
     function plusLoop() {
         var step = f.stack.pop();
         var index = f.returnStack.pop() | 0;

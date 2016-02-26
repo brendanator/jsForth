@@ -56,6 +56,15 @@ function ComparisonOperations(f) {
         f.stack.push((f.stack.pop() >= first) ? -1 : 0);
     });
 
+    f.defjs("within", function within() {
+        var upperLimit = f.stack.pop();
+        var lowerLimit = f.stack.pop();
+        var value = f.stack.pop();
+        var result = (lowerLimit < upperLimit && lowerLimit <= value && value < upperLimit ||
+            lowerLimit > upperLimit && (lowerLimit <= value || value < upperLimit));
+        f.stack.push(result ? -1 : 0);
+    });
+
     return f;
 }
 

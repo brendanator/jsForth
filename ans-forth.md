@@ -1154,15 +1154,6 @@ When the input source is a string from EVALUATE, return false and perform no oth
 
 See: 7.6.2.2125 REFILL , 11.6.2.2125 REFILL , A.6.2.2125 REFILL
 
-6.2.2148 RESTORE-INPUT
-CORE EXT
-  ( xn ... x1 n -- flag )
-Attempt to restore the input source specification to the state described by x1 through xn. flag is true if the input source specification cannot be so restored.
-
-An ambiguous condition exists if the input source represented by the arguments is not the same as the current input source.
-
-See: A.6.2.2182 SAVE-INPUT
-
 6.2.2150 ROLL
 CORE EXT
   ( xu xu-1 ... x0 u -- xu-1 ... x0 xu )
@@ -1170,12 +1161,17 @@ Remove u. Rotate u+1 items on the top of the stack. An ambiguous condition exist
 
 See: A.6.2.2150 ROLL
 
+6.2.2148 RESTORE-INPUT
+CORE EXT
+  ( xn ... x1 n -- flag )
+Attempt to restore the input source specification to the state described by x1 through xn. flag is true if the input source specification cannot be so restored.
+
+An ambiguous condition exists if the input source represented by the arguments is not the same as the current input source.
+
 6.2.2182 SAVE-INPUT
 CORE EXT
   ( -- xn ... x1 n )
 x1 through xn describe the current state of the input source specification for later use by RESTORE-INPUT.
-
-See: A.6.2.2182 SAVE-INPUT
 
 6.2.2218 SOURCE-ID
 source-i-d CORE EXT

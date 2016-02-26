@@ -180,6 +180,17 @@ function Definitions(f) {
         f.dataSpace.push(f.findDefinition(f._readWord()).executionToken);
     }, true);
 
+    f.defjs("marker", function marker() {
+        var savedLatest = latest();
+        var savedLength = f.dataSpace.length;
+
+        defheader(f._readWord());
+        f.dataSpace.push(function marker() {
+            latest(savedLatest);
+            f.dataSpace.length = savedLength;
+        });
+    });
+
     f._latest = latest;
     f._lit = _lit;
     return f;

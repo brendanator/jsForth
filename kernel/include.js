@@ -12,7 +12,7 @@ function Include(f) {
             if (process.browser) file = url.resolve(location.href, file);
             request.get(file, function(error, response, body) {
                 if (!error && response.statusCode == 200) {
-                    f.run(body, outputCallback);
+                    f.run(body, outputCallback, file.toString());
                 } else {
                     console.error("Failed to load http file " + file + ". " + error);
                 }
@@ -20,7 +20,7 @@ function Include(f) {
         } else {
             fs.readFile(file, "utf8", function(error, body) {
                 if (!error) {
-                    f.run(body, outputCallback);
+                    f.run(body, outputCallback, file);
                 } else {
                     console.error("Failed to load file " + file + ". " + error);
                 }

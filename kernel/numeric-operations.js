@@ -41,6 +41,14 @@ function NumericOperations(f) {
         f.stack.push(value.high);
     });
 
+    f.defjs("*/", function multiplyDivide() {
+        var divisor = Long.fromInt(f.stack.pop());
+        var first = Long.fromInt(f.stack.pop());
+        var second = Long.fromInt(f.stack.pop());
+        var quotient = first.mul(second).div(divisor).toInt();
+        f.stack.push(quotient);
+    });
+
     f.defjs("m*", function() {
         var first = Long.fromInt(f.stack.pop());
         var second = Long.fromInt(f.stack.pop());

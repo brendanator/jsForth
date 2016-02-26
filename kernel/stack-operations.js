@@ -19,7 +19,7 @@ function StackOperations(f) {
     });
 
     f.defjs("pick", function pick() {
-        f.stack.push(f.stack.peek(f.stack.pop()));
+        f.stack.push(f.stack.peek(f.stack.pop() + 1));
     });
 
     f.defjs("rot", function rot() {

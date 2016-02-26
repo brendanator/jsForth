@@ -1,10 +1,10 @@
 var InputExceptions = require("./input-exceptions.js");
 
 function Interpreter(f) {
-    function run(input, outputCallback) {
+    function run(input, outputCallback, sourceId) {
         f.outputCallback = outputCallback;
 
-        f._newInput(input);
+        f._newInput(input, sourceId || 0);
         f._output = "";
 
         try {
@@ -55,8 +55,18 @@ function Interpreter(f) {
 
     f._evaluate = f.defjs("evaluate", function evaluate() {
         var length = f.stack.pop();
-        var position = f.stack.pop() - f._INPUT_SOURCE;
-        f._subInput(position, length);
+        var address = f.stack.pop();
+        if (address < 0) {
+            var position = address - f._INPUT_SOURCE;
+            f._subInput(position, length);
+        } else {
+            var string = "";
+            for (var i = 0; i < length; i++) {
+                string += String.fromCharCode(f._getAddress(address + i));
+            }
+            f._newInput(string, -1);
+        }
+
         f.instructionPointer = interpretInstruction;
     });
 

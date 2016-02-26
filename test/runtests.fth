@@ -16,9 +16,9 @@ include test/verbose-tester.fth
 
 include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/core.fr
 include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/coreplustest.fth
-\ include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/utilities.fth
-\ include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/errorreport.fth
-\ include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/coreexttest.fth
+include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/utilities.fth
+include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/errorreport.fth
+include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/coreexttest.fth
 \ include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/blocktest.fth
 \ include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/doubletest.fth
 \ include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/exceptiontest.fth

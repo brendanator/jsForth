@@ -24,7 +24,7 @@ function Stack(name) {
     this.roll = function(num) {
         if (num === 0) return;
 
-        var index = data.length - num;
+        var index = data.length - num - 1;
         if (0 <= index && index < data.length) {
             var newTop = data.splice(index, 1)[0];
             data.push(newTop);

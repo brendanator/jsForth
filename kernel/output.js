@@ -22,6 +22,24 @@ function Output(f) {
         f._output += value + " ";
     });
 
+    f.defjs(".r", function dotR() {
+        var value;
+        var width = f.stack.pop();
+        var top = f.stack.pop();
+
+        if (typeof top === "undefined")
+            value = "undefined";
+        else if (top === null)
+            value = "null";
+        else
+            value = top.toString(f._base()); // Output numbers in current base
+
+        while (value.length < width) {
+            value = " " + value;
+        }
+        f._output += value + " ";
+    });
+
     f.defjs("emit", function emit() {
         var value = f.stack.pop();
         if (typeof value === "number")

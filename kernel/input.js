@@ -1,9 +1,8 @@
 var InputExceptions = require("./input-exceptions.js");
 
-function InputWindow(input, startPosition, endPosition, toIn) {
+function InputWindow(input, startPosition, endPosition, toIn, sourceId) {
     var inputBufferPosition = startPosition;
     var inputBufferLength = -1;
-    refill();
 
     function refill() {
         inputBufferPosition += inputBufferLength + 1;
@@ -37,7 +36,7 @@ function InputWindow(input, startPosition, endPosition, toIn) {
             }
         }
 
-        var endPosition = startPosition + 1;
+        var endPosition = startPosition;
         while (inputBuf.charCodeAt(endPosition) !== delimiter && endPosition < inputBuf.length) {
             endPosition++;
         }
@@ -51,16 +50,87 @@ function InputWindow(input, startPosition, endPosition, toIn) {
         return parse(delimiter, true)[2];
     }
 
+    function sBackslashQuote() {
+        var string = "";
+
+        while (true) {
+            var char = readKey();
+
+            if (char === "\"") {
+                break;
+            } else if (char === "\\") {
+                var nextChar = readKey();
+                switch (nextChar) {
+                    case "a":
+                        string += String.fromCharCode(7);
+                        break;
+                    case "b":
+                        string += String.fromCharCode(8);
+                        break;
+                    case "e":
+                        string += String.fromCharCode(27);
+                        break;
+                    case "f":
+                        string += String.fromCharCode(12);
+                        break;
+                    case "l":
+                        string += String.fromCharCode(10);
+                        break;
+                    case "m":
+                        string += String.fromCharCode(13) + String.fromCharCode(10);
+                        break;
+                    case "n":
+                        string += String.fromCharCode(10);
+                        break;
+                    case "q":
+                        string += String.fromCharCode(34);
+                        break;
+                    case "r":
+                        string += String.fromCharCode(13);
+                        break;
+                    case "t":
+                        string += String.fromCharCode(9);
+                        break;
+                    case "v":
+                        string += String.fromCharCode(11);
+                        break;
+                    case "z":
+                        string += String.fromCharCode(0);
+                        break;
+                    case "\"":
+                        string += String.fromCharCode(34);
+                        break;
+                    case "x":
+                        string += String.fromCharCode(parseInt(readKey() + readKey(), 16));
+                        break;
+                    case "\\":
+                        string += String.fromCharCode(92);
+                        break;
+                    default:
+                        // Be lenient
+                        string += nextChar;
+                }
+            } else {
+                string += char;
+            }
+        }
+
+        return string;
+    }
+
     function source() {
         return [inputBufferPosition, inputBufferLength];
     }
 
     function inputBuffer() {
-        return input.substring(inputBufferPosition, inputBufferPosition + inputBufferLength);
+        if (inputBufferLength > 0)
+            return input.substring(inputBufferPosition, inputBufferPosition + inputBufferLength);
+        else
+            return "";
     }
 
     function subInput(position, length) {
-        return InputWindow(input, position, position + length, toIn);
+        return InputWindow(input, position, position + length, toIn, -1);
     }
 
     function charCodeAt(index) {
@@ -75,7 +145,9 @@ function InputWindow(input, startPosition, endPosition, toIn) {
         inputBuffer: inputBuffer,
         source: source,
         charCodeAt: charCodeAt,
-        subInput: subInput
+        subInput: subInput,
+        sBackslashQuote: sBackslashQuote,
+        sourceId: sourceId
     };
 }
 
@@ -85,13 +157,17 @@ function Input(f) {
     // Input buffer pointer
     var toIn = f.defvar(">in", 0);
 
-    // Address offset to indicate input addresses 
+    // Address offset to indicate input addresses
     var INPUT_SOURCE = 1 << 31;
 
     f.defjs("source", function source() {
         var positionLength = f._currentInput.source();
         f.stack.push(INPUT_SOURCE + positionLength[0]);
         f.stack.push(positionLength[1]);
+    });
+
+    f.defjs("source-id", function sourceId() {
+        f.stack.push(f._currentInput.sourceId);
     });
 
     f.defjs("refill", function refill() {
@@ -103,7 +179,13 @@ function Input(f) {
     });
 
     f.defjs("parse", function parse() {
-        var addressLength = f._currentInput.parse(f.stack.pop());
+        var addressLength = f._currentInput.parse(f.stack.pop(), false);
+        f.stack.push(INPUT_SOURCE + addressLength[0]);
+        f.stack.push(addressLength[1]);
+    });
+
+    f.defjs("parse-name", function parse() {
+        var addressLength = f._currentInput.parse(" ".charCodeAt(0), true);
         f.stack.push(INPUT_SOURCE + addressLength[0]);
         f.stack.push(addressLength[1]);
     });
@@ -125,6 +207,22 @@ function Input(f) {
 
         f.stack.push(wordBufferStart);
     });
+
+    f.defjs("s\\\"", function sBackslashQuote() {
+        var string = f._currentInput.sBackslashQuote();
+        var stringAddress = f.dataSpace.length + 1;
+        f.dataSpace.push(function() {
+            f.stack.push(stringAddress);
+            f.stack.push(string.length);
+
+            // Jump over compiled string
+            f.instructionPointer += string.length;
+        });
+
+        for (var i = 0; i < string.length; i++) {
+            f.dataSpace.push(string[i]);
+        }
+    }, true); // Immediate
 
     f.defjs("char", function char() {
         f.stack.push(readWord().charCodeAt(0));
@@ -206,11 +304,11 @@ function Input(f) {
 
     var inputString = "";
 
-    function newInput(input) {
+    function newInput(input, sourceId) {
         saveCurrentInput();
         var startPosition = inputString.length;
         inputString += input;
-        f._currentInput = InputWindow(inputString, startPosition, inputString.length, toIn);
+        f._currentInput = InputWindow(inputString, startPosition, inputString.length, toIn, sourceId);
     }
 
     var inputStack = [];
@@ -241,6 +339,30 @@ function Input(f) {
             f._currentInput = null;
         }
     }
+
+    f.defjs("save-input", function saveInput() {
+        saveCurrentInput();
+        for (var i = 0; i < inputStack.length; i++) {
+            f.stack.push(inputStack[i]);
+        }
+        f.stack.push(inputStack.length);
+        inputStack.pop();
+    });
+
+    f.defjs("restore-input", function restoreInput() {
+        inputStack.length = 0;
+
+        var length = f.stack.pop();
+        for (var i = length - 1; i >= 0; i--) {
+            inputStack[i] = f.stack.pop();
+        }
+
+        var savedInput = inputStack.pop();
+        f._currentInput = savedInput.input;
+        toIn(savedInput.toIn);
+
+        f.stack.push(0);
+    });
 
     f._readWord = readWord;
     f._newInput = newInput;
