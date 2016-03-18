@@ -1,5 +1,9 @@
 ## pop, dup, swap, dip are universal stack operations - sketch of proof 
 
+> For Joy itself the following seems to be an adequate base for shuffling the stack: the three simple operators swap dup and pop, together with the combinator dip.
+> [Manfred von Thun](http://www.nsl.com/papers/interview.htm)
+
+
     // Bring element `n-th from top` to the top
     bring-up(0) = noop
     bring-up(1) = swap
