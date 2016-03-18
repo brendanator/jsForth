@@ -1214,6 +1214,16 @@ function JsInterop(f) {
         }
     }, true);
 
+    f.defjs(">js-string", function toJsString() {
+        var length = f.stack.pop();
+        var address = f.stack.pop();
+        var string = "";
+        for (var i = 0; i < length; i++) {
+            string += String.fromCharCode(f._getAddress(address + i));
+        }
+        f.stack.push(string);        
+    })
+
     return f;
 }
 
