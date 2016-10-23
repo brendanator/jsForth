@@ -4,22 +4,33 @@ An implementation of [Forth](https://en.wikipedia.org/wiki/Forth_(programming_la
 
 Try it out [here](https://brendanator.github.io/jsForth/) 
 
-### Rationale
-
-I wanted to learn a [concatenative programming language](https://en.wikipedia.org/wiki/Concatenative_programming_language) and thought the best way to do so would be to implement one myself
-
 ### ANS Forth
 
-jsForth implements the full core ANS standard, however native js types are used instead of those specified in the standard:
+jsForth implements the full core ANS standard
 
-#### Numbers
-js numbers are floating point and so all numeric operations operate on floating point values
+The following word sets are implemented:
 
-#### Strings
-js strings are used instead of counted strings and may replace character strings
+- Core words - fully implemented
+    - All tests pass except some integer multiplication/division edge cases where the ANS spec differs from the results given by the [long](https://github.com/dcodeIO/long.js) package
+- Core plus words - fully implemented and all tests pass
+- Core extension words - fully implemented and all tests pass
 
-#### Booleans 
-js `true` and `false` are used instead of flags `-1` and `0`. js boolean coercion means that numbers will work as expected with `if`, `while` and `until`
+The ANS Forth tests can be run using `npm run test` or in the intepreter with the following forth code
+```
+include test/verbose-tester.fth
+include https://raw.githubusercontent.com/gerryjackson/forth2012-test-suite/master/src/core.fr
+```
+The complete test suite is available [here](https://github.com/gerryjackson/forth2012-test-suite/)
+
+### js interop
+
+- global variable access   `js /document`
+- array access             `js .0.2`
+- property access          `js .name`
+- property setting         `js .name!`
+- function calling         `js .sin{1}`
+- method calling           `js /document.getElementById{1}`
+- new with params          `js .new{1}`
 
 ### Threading model - trampolined threading
 
