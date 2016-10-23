@@ -82,7 +82,7 @@ function JsInterop(f) {
         for (var i = 0; i < length; i++) {
             string += String.fromCharCode(f._getAddress(address + i));
         }
-        f.stack.push(string);        
+        f.stack.push(string);
     })
 
     return f;

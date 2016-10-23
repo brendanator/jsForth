@@ -234,6 +234,7 @@ function Input(f) {
         var address = f.stack.pop();
 
         f.currentInstruction = function acceptCallback() {
+            f._currentInput.refill();
             var received = f._currentInput.inputBuffer().substring(0, maxLength).split("\n")[0];
 
             f.stack.push(received.length);
