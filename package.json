@@ -1,6 +1,6 @@
 {
   "name": "js-forth",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "brendanator",
   "main": "kernel/forth.js",
   "homepage": "https://github.com/brendanator/jsForth",
