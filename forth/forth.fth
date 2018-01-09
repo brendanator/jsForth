@@ -77,7 +77,6 @@
 : .( ( display "ccc<paren>" -- ) ')' parse type ; immediate
 : s" ( "ccc<quote>" -- ) ( -- c-addr u ) '"' parse postpone sliteral ; immediate
 : ." ( "ccc<quote>" -- ) ( display ) '"' parse postpone sliteral postpone type ; immediate
-: .s ( -- ) dup . ;
 
 \ Addresses
 : cell ( -- n ) 1 ;
